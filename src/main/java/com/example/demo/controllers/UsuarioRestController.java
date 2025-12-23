@@ -100,7 +100,7 @@ public class UsuarioRestController {
 
             try {
                 SimpleMailMessage message = new SimpleMailMessage();
-                message.setFrom("tu_correo@gmail.com"); 
+                message.setFrom("juanalberto25423@gmail.com"); 
                 message.setTo(nuevoUsuario.getCorreo());
                 message.setSubject("Verifica tu cuenta - Loopi");
                 message.setText("Tu código de verificación es: " + token);
