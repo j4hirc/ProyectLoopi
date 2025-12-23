@@ -17,10 +17,10 @@ import com.example.demo.models.service.IQrCanjeService;
 import com.example.demo.models.service.IRecompensaService;
 import com.example.demo.models.service.IUsuarioService;
 
-
+// DTO Actualizado para recibir String
 class ValidacionRequest {
     public String token;
-    public Long idAuspiciante; 
+    public String codigo; // <--- AHORA ES STRING (El código secreto del local)
 }
 
 @RestController
@@ -63,13 +63,13 @@ public class QrCanjeoRestController {
 	@PostMapping("/qr_canjeos")
 	public ResponseEntity<?> create(@RequestBody QR_Canje datosEntrada) {
 		
-		// 1. Validar que vengan los IDs necesarios
+		// 1. Validar inputs
 		if (datosEntrada.getUsuario() == null || datosEntrada.getUsuario().getCedula() == null ||
 			datosEntrada.getRecompensa() == null || datosEntrada.getRecompensa().getId_recompensa() == null) {
 			return ResponseEntity.badRequest().body(Map.of("mensaje", "Faltan datos del usuario o recompensa"));
 		}
 
-		// 2. Buscar entidades reales en BD
+		// 2. Buscar en BD
 		Usuario usuario = usuarioService.findById(datosEntrada.getUsuario().getCedula());
 		Recompensa recompensa = recompensaService.findById(datosEntrada.getRecompensa().getId_recompensa());
 
@@ -77,30 +77,29 @@ public class QrCanjeoRestController {
 			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("mensaje", "Usuario o Recompensa no encontrados"));
 		}
 
-		// 3. VERIFICAR PUNTOS (Lógica de Negocio)
+		// 3. Validar Puntos
 		if (usuario.getPuntos_actuales() < recompensa.getCostoPuntos()) {
-			return ResponseEntity.badRequest().body(Map.of("mensaje", "No tienes puntos suficientes para este canje"));
+			return ResponseEntity.badRequest().body(Map.of("mensaje", "No tienes puntos suficientes"));
 		}
 
-		// 4. DESCONTAR PUNTOS Y GUARDAR USUARIO
+		// 4. Descontar puntos
 		usuario.setPuntos_actuales(usuario.getPuntos_actuales() - recompensa.getCostoPuntos());
 		usuarioService.save(usuario);
 
-		// 5. GENERAR EL QR (TOKEN)
+		// 5. Generar QR
 		QR_Canje nuevoCanje = new QR_Canje();
 		nuevoCanje.setUsuario(usuario);
 		nuevoCanje.setRecompensa(recompensa);
-		nuevoCanje.setUsado(false); // Nace sin usar
-		// Generamos un código único aleatorio (Ej: "550e8400-e29b-...")
+		nuevoCanje.setUsado(false);
 		nuevoCanje.setToken(UUID.randomUUID().toString()); 
 
-		// 6. GUARDAR Y RETORNAR
+		// 6. Guardar
 		QR_Canje canjeGuardado = qrCanjeService.save(nuevoCanje);
 		
 		return ResponseEntity.status(HttpStatus.CREATED).body(canjeGuardado);
 	}
 
-	// Método para validar/usar el QR (Para la App del Administrador/Local)
+	// --- MÉTODO ACTUALIZADO PARA VALIDAR CON CÓDIGO STRING ---
 	@PutMapping("/qr_canjeos/validar")
     public ResponseEntity<?> validarCanje(@RequestBody ValidacionRequest request) {
         
@@ -114,19 +113,20 @@ public class QrCanjeoRestController {
 
         // 2. Verificar si ya fue usado
         if (Boolean.TRUE.equals(qr.getUsado())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
+            return ResponseEntity.status(HttpStatus.CONFLICT) // 409 Conflict
                     .body(Map.of("mensaje", "Este código ya fue utilizado."));
         }
 
-        // 3. --- NUEVA VALIDACIÓN DE SEGURIDAD ---
-        // Verificar que el Auspiciante que escanea sea el dueño de la recompensa
-        Long idDueñoRecompensa = qr.getRecompensa().getAuspiciante().getId_auspiciante();
+        // 3. --- NUEVA VALIDACIÓN POR CÓDIGO STRING ---
+        // Obtenemos el código del Auspiciante dueño del premio
+        String codigoDueño = qr.getRecompensa().getAuspiciante().getCodigo();
         
-        if (!idDueñoRecompensa.equals(request.idAuspiciante)) {
+        // Validamos (ignora mayúsculas/minúsculas para que no haya lio)
+        if (codigoDueño == null || !codigoDueño.equalsIgnoreCase(request.codigo)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN) // 403 Prohibido
                     .body(Map.of(
-                        "mensaje", "No puedes validar este cupón.",
-                        "error", "Este premio pertenece a otro local (" + qr.getRecompensa().getAuspiciante().getNombre() + ")"
+                        "mensaje", "Código de local incorrecto.",
+                        "error", "Este premio pertenece a: " + qr.getRecompensa().getAuspiciante().getNombre()
                     ));
         }
 
@@ -135,10 +135,13 @@ public class QrCanjeoRestController {
         qr.setFecha_usado(LocalDateTime.now());
         QR_Canje actualizado = qrCanjeService.save(qr);
 
+        // Devolvemos más datos para que el Frontend muestre la alerta bonita
         return ResponseEntity.ok(Map.of(
             "mensaje", "Canje exitoso",
             "recompensa_titulo", actualizado.getRecompensa().getNombre(),
-            "usuario_nombre", actualizado.getUsuario().getPrimer_nombre()
+            "recompensa_desc", actualizado.getRecompensa().getDescripcion() != null ? actualizado.getRecompensa().getDescripcion() : "",
+            "usuario_nombre", actualizado.getUsuario().getPrimer_nombre() + " " + actualizado.getUsuario().getApellido_paterno(),
+            "usuario_foto", actualizado.getUsuario().getFoto() != null ? actualizado.getUsuario().getFoto() : ""
         ));
     }
 
