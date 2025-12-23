@@ -323,4 +323,10 @@ if (usuario.getPuntos_actuales() != null && usuario.getPuntos_actuales() != 0) {
 
         return ResponseEntity.ok(Map.of("mensaje", "Contraseña actualizada correctamente."));
     }
+    
+    
+    @GetMapping("/healthz")
+    public String healthCheck() {
+        return "OK";
+    }
 }
