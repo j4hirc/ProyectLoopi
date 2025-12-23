@@ -277,7 +277,7 @@ if (usuario.getPuntos_actuales() != null && usuario.getPuntos_actuales() != 0) {
         // --- ENVÍO DE CORREO REAL ---
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("tu_correo@gmail.com"); // Debe coincidir con application.properties
+            message.setFrom("juanalberto25423@gmail.com"); // Debe coincidir con application.properties
             message.setTo(correo);
             message.setSubject("Código de Recuperación - Loopi");
             message.setText("Hola " + usuario.getPrimer_nombre() + ",\n\n" +
