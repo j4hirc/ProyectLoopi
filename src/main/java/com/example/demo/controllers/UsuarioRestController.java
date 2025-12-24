@@ -55,68 +55,87 @@ public class UsuarioRestController {
 	}
 
 	@PostMapping("/usuarios")
-    public ResponseEntity<?> create(@RequestBody Usuario usuario) {
+	public ResponseEntity<?> create(@RequestBody Usuario usuario) {
+	    if (usuarioService.existsByCedula(usuario.getCedula())) {
+	        Usuario existente = usuarioService.findById(usuario.getCedula());
+	        if (existente != null && !existente.isEstado()) {
+	            usuarioService.delete(usuario.getCedula());
+	        } else {
+	            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: La cédula ya se encuentra registrada."));
+	        }
+	    }
 
-        if (usuarioService.existsByCedula(usuario.getCedula())) {
-            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: La cédula ya se encuentra registrada."));
-        }
+	    if (usuarioService.existsByCorreo(usuario.getCorreo())) {
+	        Usuario existente = usuarioService.findByCorreo(usuario.getCorreo());
+	        if (existente != null && !existente.isEstado()) {
+	            usuarioService.delete(existente.getCedula());
+	        } else {
+	            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El correo ya está registrado."));
+	        }
+	    }
 
-        if (usuarioService.existsByCorreo(usuario.getCorreo())) {
-            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El correo ya está registrado."));
-        }
+	    if (usuario.getPassword() != null) {
+	        String plain = usuario.getPassword().trim().replace("[", "").replace("]", "");
+	        usuario.setPassword(passwordEncoder.encode(plain));
+	    }
 
-        if (usuario.getPassword() != null) {
-            String plain = usuario.getPassword().trim().replace("[", "").replace("]", "");
-            usuario.setPassword(passwordEncoder.encode(plain));
-        }
+	    if (usuario.getRoles() != null && !usuario.getRoles().isEmpty()) {
+	        for (UsuarioRol ur : usuario.getRoles()) {
+	            if (ur.getRol() != null) {
+	                Long idRol = ur.getRol().getId_rol();
+	                Rol rolReal = (idRol != null) ? rolDao.findById(idRol).orElse(null) : null;
+	                if (rolReal != null) {
+	                    ur.setRol(rolReal);
+	                    ur.setUsuario(usuario);
+	                }
+	            }
+	        }
+	    }
+	    
 
-        // Roles... (tu lógica de roles sigue igual)
-        if (usuario.getRoles() != null && !usuario.getRoles().isEmpty()) {
-            for (UsuarioRol ur : usuario.getRoles()) {
-                if (ur.getRol() != null) {
-                    Long idRol = ur.getRol().getId_rol();
-                    Rol rolReal = (idRol != null) ? rolDao.findById(idRol).orElse(null) : null;
-                    if (rolReal != null) {
-                        ur.setRol(rolReal);
-                        ur.setUsuario(usuario);
-                    }
-                }
-            }
-        }
-        
-        // 🔥 LÓGICA HÍBRIDA: SI EL ADMIN LO MANDA ACTIVO, NO PEDIMOS CÓDIGO 🔥
-        if (usuario.isEstado()) {
-            // Caso 1: Creación directa (Admin dice que es activo)
-            Usuario nuevoUsuario = usuarioService.save(usuario);
-            return ResponseEntity.status(HttpStatus.CREATED).body(nuevoUsuario);
-        
-        } else {
-            // Caso 2: Creación pendiente (Admin dice inactivo o es Registro normal)
-            usuario.setEstado(false); // Aseguramos que sea false
-            Usuario nuevoUsuario = usuarioService.save(usuario);
+	    if (usuario.isEstado()) {
+	        // Caso A: El Admin lo crea directo como ACTIVO (No enviamos correo de verificación)
+	        Usuario nuevoUsuario = usuarioService.save(usuario);
+	        return ResponseEntity.status(HttpStatus.CREATED).body(nuevoUsuario);
+	    
+	    } else {
+	        
+	        usuario.setEstado(false); 
+	        Usuario nuevoUsuario = usuarioService.save(usuario);
 
-            String token = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-            tokenStore.put(token, nuevoUsuario.getCorreo());
+	        String token = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+	        tokenStore.put(token, nuevoUsuario.getCorreo());
 
-            try {
-                SimpleMailMessage message = new SimpleMailMessage();
-                message.setFrom("juanalberto25423@gmail.com"); 
-                message.setTo(nuevoUsuario.getCorreo());
-                message.setSubject("Verifica tu cuenta - Loopi");
-                message.setText("Tu código de verificación es: " + token);
-                
-                mailSender.send(message);
-                
-            } catch (Exception e) {
-                usuarioService.delete(nuevoUsuario.getCedula()); 
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("mensaje", "No se pudo enviar el correo. Verifica que la dirección exista."));
-            }
+	        try {
+	            SimpleMailMessage message = new SimpleMailMessage();
+	            
+	            message.setFrom("juanalberto25423@gmail.com"); 
+	            
+	            message.setTo(nuevoUsuario.getCorreo());
+	            message.setSubject("Verifica tu cuenta - Loopi");
+	            message.setText("Hola " + nuevoUsuario.getPrimer_nombre() + ",\n\n" +
+	                            "Tu código de verificación es: " + token + "\n\n" +
+	                            "Si no activas tu cuenta, este registro se eliminará.");
+	            
+	            mailSender.send(message);
+	            
+	            return ResponseEntity.status(HttpStatus.CREATED)
+	                    .body(Map.of("mensaje", "Cuenta creada. Revisa tu correo.", "necesita_verificacion", true));
 
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(Map.of("mensaje", "Cuenta creada. Requiere verificación.", "necesita_verificacion", true));
-        }
-    }
+	        } catch (Exception e) {
+	            
+	            usuarioService.delete(nuevoUsuario.getCedula());
+	            
+	            tokenStore.remove(token);
+	            
+	            e.printStackTrace();
+
+	            // 3. Respondemos al Frontend que el correo no sirve
+	            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+	                    .body(Map.of("mensaje", "Error crítico: El correo ingresado NO EXISTE o no se pudo contactar. El registro ha sido cancelado."));
+	        }
+	    }
+	}
 
     @PostMapping("/usuarios/verificar")
     public ResponseEntity<?> verificarCuenta(@RequestBody Map<String, String> body) {
