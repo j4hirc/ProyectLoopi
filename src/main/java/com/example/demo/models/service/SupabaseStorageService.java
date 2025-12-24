@@ -2,52 +2,66 @@ package com.example.demo.models.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.MultipartBodyBuilder;
-import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.core.io.ByteArrayResource;
 
 import java.util.UUID;
 
 @Service
 public class SupabaseStorageService {
 
-    // --- REEMPLAZA ESTOS DATOS CON LOS TUYOS DE SUPABASE ---
+    // --- TUS CREDENCIALES ---
     private final String PROJECT_URL = "https://mkrvevdwqkwyctqxddpu.supabase.co"; 
     private final String API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcnZldmR3cWt3eWN0cXhkZHB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1OTExMzAsImV4cCI6MjA4MjE2NzEzMH0.vAUs-9G_8Mh80E_v-x2k8tEv-rbadPM_zvQIqHNtmFY"; 
-    private final String BUCKET_NAME = "imagenes"; // El nombre que le pusiste al bucket
+    private final String BUCKET_NAME = "imagenes";
 
-    private final WebClient webClient;
+    private final RestTemplate restTemplate;
 
-    public SupabaseStorageService(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder.baseUrl(PROJECT_URL).build();
+    public SupabaseStorageService() {
+        this.restTemplate = new RestTemplate();
     }
 
     public String subirImagen(MultipartFile file) {
         try {
-            // 1. Generamos nombre único (ej: a1b2c3_foto.jpg)
+            // 1. Generar nombre único
             String fileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
+            String urlApi = PROJECT_URL + "/storage/v1/object/" + BUCKET_NAME + "/" + fileName;
 
-            // 2. Preparamos el cuerpo del envío
-            MultipartBodyBuilder builder = new MultipartBodyBuilder();
-            builder.part("file", file.getResource());
+            // 2. Preparar Headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + API_KEY);
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
-            // 3. Enviamos a Supabase Storage
-            webClient.post()
-                    .uri("/storage/v1/object/" + BUCKET_NAME + "/" + fileName)
-                    .header("Authorization", "Bearer " + API_KEY)
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .body(BodyInserters.fromMultipartData(builder.build()))
-                    .retrieve()
-                    .bodyToMono(String.class) // Esperamos respuesta
-                    .block(); // Bloqueamos para esperar que suba
+            // 3. Preparar el cuerpo (El archivo)
+            // Truco: Usamos ByteArrayResource sobreescribiendo getFilename para que Supabase lo reconozca
+            ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return file.getOriginalFilename();
+                }
+            };
 
-            // 4. Retornamos la URL pública (para guardarla en la BD)
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", fileResource);
+
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+
+            // 4. Enviar Petición (POST)
+            restTemplate.postForEntity(urlApi, requestEntity, String.class);
+
+            // 5. Retornar URL Pública
             return PROJECT_URL + "/storage/v1/object/public/" + BUCKET_NAME + "/" + fileName;
 
         } catch (Exception e) {
             System.err.println("Error subiendo a Supabase: " + e.getMessage());
-            return null; // O lanza una excepción si prefieres
+            e.printStackTrace(); // Para ver el error real en consola
+            return null; 
         }
     }
 }
