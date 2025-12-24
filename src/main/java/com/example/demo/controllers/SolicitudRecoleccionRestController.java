@@ -56,7 +56,7 @@ public class SolicitudRecoleccionRestController {
     @Autowired
     private SupabaseStorageService storageService;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private ObjectMapper objectMapper = new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     @GetMapping("/solicitud_recolecciones")
     public List<SolicitudRecoleccion> indext() { return solicitudRecoleccionService.findAll(); }
