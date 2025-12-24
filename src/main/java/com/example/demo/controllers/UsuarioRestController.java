@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap; // Importante para guardar tokens
-
+import java.util.concurrent.ConcurrentHashMap;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 
 import com.example.demo.models.entity.Usuario;
 import com.example.demo.models.DAO.IRolDao;
+import com.example.demo.models.DAO.IUsuarioRolDao;
 import com.example.demo.models.entity.Rol;
 import com.example.demo.models.entity.UsuarioRol;
 import com.example.demo.models.service.IUsuarioService;
@@ -31,6 +33,9 @@ public class UsuarioRestController {
 	
 	@Autowired
 	private IRolDao rolDao;
+	
+	@Autowired
+	private IUsuarioRolDao usuarioRolDao;
 	
 	@Autowired
     private JavaMailSender mailSender;
@@ -56,22 +61,21 @@ public class UsuarioRestController {
 
 	@PostMapping("/usuarios")
 	public ResponseEntity<?> create(@RequestBody Usuario usuario) {
+
 	    if (usuarioService.existsByCedula(usuario.getCedula())) {
-	        Usuario existente = usuarioService.findById(usuario.getCedula());
-	        if (existente != null && !existente.isEstado()) {
-	            usuarioService.delete(usuario.getCedula());
-	        } else {
-	            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: La cédula ya se encuentra registrada."));
-	        }
+	        return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: La cédula ya se encuentra registrada."));
 	    }
 
 	    if (usuarioService.existsByCorreo(usuario.getCorreo())) {
-	        Usuario existente = usuarioService.findByCorreo(usuario.getCorreo());
-	        if (existente != null && !existente.isEstado()) {
-	            usuarioService.delete(existente.getCedula());
-	        } else {
-	            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El correo ya está registrado."));
-	        }
+	        return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El correo ya está registrado."));
+	    }
+
+	    String email = usuario.getCorreo();
+	    String dominio = email.substring(email.indexOf("@") + 1);
+	    try {
+	        InetAddress.getByName(dominio);
+	    } catch (UnknownHostException e) {
+	        return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El dominio del correo (@" + dominio + ") no existe o no es válido."));
 	    }
 
 	    if (usuario.getPassword() != null) {
@@ -92,15 +96,13 @@ public class UsuarioRestController {
 	        }
 	    }
 	    
-
 	    if (usuario.isEstado()) {
-	        // Caso A: El Admin lo crea directo como ACTIVO (No enviamos correo de verificación)
 	        Usuario nuevoUsuario = usuarioService.save(usuario);
 	        return ResponseEntity.status(HttpStatus.CREATED).body(nuevoUsuario);
 	    
 	    } else {
-	        
 	        usuario.setEstado(false); 
+	        
 	        Usuario nuevoUsuario = usuarioService.save(usuario);
 
 	        String token = UUID.randomUUID().toString().substring(0, 6).toUpperCase();
@@ -108,14 +110,11 @@ public class UsuarioRestController {
 
 	        try {
 	            SimpleMailMessage message = new SimpleMailMessage();
-	            
-	            message.setFrom("juanalberto25423@gmail.com"); 
-	            
+	            message.setFrom("juanalberto25423@gmail.com"); // TU CORREO DE BREVO
 	            message.setTo(nuevoUsuario.getCorreo());
 	            message.setSubject("Verifica tu cuenta - Loopi");
 	            message.setText("Hola " + nuevoUsuario.getPrimer_nombre() + ",\n\n" +
-	                            "Tu código de verificación es: " + token + "\n\n" +
-	                            "Si no activas tu cuenta, este registro se eliminará.");
+	                            "Tu código de verificación es: " + token);
 	            
 	            mailSender.send(message);
 	            
@@ -123,19 +122,27 @@ public class UsuarioRestController {
 	                    .body(Map.of("mensaje", "Cuenta creada. Revisa tu correo.", "necesita_verificacion", true));
 
 	        } catch (Exception e) {
-	            
+	            e.printStackTrace(); 
+
+	            try {
+	                if (nuevoUsuario.getRoles() != null && !nuevoUsuario.getRoles().isEmpty()) {
+	                     usuarioRolDao.deleteAll(nuevoUsuario.getRoles());
+	                }
+	            } catch (Exception exRoles) {
+	                System.err.println("Error intentando borrar roles: " + exRoles.getMessage());
+	            }
+
 	            usuarioService.delete(nuevoUsuario.getCedula());
 	            
 	            tokenStore.remove(token);
-	            
-	            e.printStackTrace();
 
-	            // 3. Respondemos al Frontend que el correo no sirve
 	            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-	                    .body(Map.of("mensaje", "Error crítico: El correo ingresado NO EXISTE o no se pudo contactar. El registro ha sido cancelado."));
+	                    .body(Map.of("mensaje", "Error crítico: El correo no existe o rebotó. El registro ha sido cancelado."));
 	        }
 	    }
 	}
+	
+	
 
     @PostMapping("/usuarios/verificar")
     public ResponseEntity<?> verificarCuenta(@RequestBody Map<String, String> body) {
