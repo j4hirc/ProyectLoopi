@@ -11,14 +11,17 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile; // Importante
+import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.databind.ObjectMapper; // Importante
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import com.example.demo.models.entity.Logro;
 import com.example.demo.models.entity.Notificacion;
 import com.example.demo.models.entity.Rango;
 import com.example.demo.models.entity.SolicitudRecoleccion;
+// IMPORTANTE: Aquí importamos tu clase correcta
+import com.example.demo.models.entity.DetalleEntrega; 
 import com.example.demo.models.entity.Usuario;
 import com.example.demo.models.entity.UsuarioLogro;
 import com.example.demo.models.service.ILogroService;
@@ -27,7 +30,7 @@ import com.example.demo.models.service.IRangoService;
 import com.example.demo.models.service.ISolicitudRecoleccionService;
 import com.example.demo.models.service.IUsuarioLogroService;
 import com.example.demo.models.service.IUsuarioService;
-import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de Nube
+import com.example.demo.models.service.SupabaseStorageService;
 
 @RestController
 @RequestMapping("/api")
@@ -35,7 +38,7 @@ import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de
 public class SolicitudRecoleccionRestController {
 
     @Autowired
-    private IUsuarioService usuarioService; // Usamos la interfaz
+    private IUsuarioService usuarioService;
     
     @Autowired
     private ISolicitudRecoleccionService solicitudRecoleccionService;
@@ -52,11 +55,11 @@ public class SolicitudRecoleccionRestController {
     @Autowired
     private IUsuarioLogroService usuarioLogroService;
 
-
     @Autowired
     private SupabaseStorageService storageService;
 
-    private ObjectMapper objectMapper = new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+    // Configuración del Mapper para fechas
+    private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @GetMapping("/solicitud_recolecciones")
     public List<SolicitudRecoleccion> indext() { return solicitudRecoleccionService.findAll(); }
@@ -65,7 +68,7 @@ public class SolicitudRecoleccionRestController {
     public SolicitudRecoleccion show(@PathVariable Long id) { return solicitudRecoleccionService.findById(id); }
 
     // =================================================================
-    // CREAR SOLICITUD (Con Foto de Evidencia)
+    // CREAR SOLICITUD (SOLUCIÓN FINAL ERROR 500)
     // =================================================================
     @PostMapping(value = "/solicitud_recolecciones", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> create(
@@ -74,34 +77,60 @@ public class SolicitudRecoleccionRestController {
     ) {
         SolicitudRecoleccion solicitudRecoleccion;
         try {
-            // Convertir JSON a Objeto
+            // 1. Convertir JSON a Objeto Java
             solicitudRecoleccion = objectMapper.readValue(datosJson, SolicitudRecoleccion.class);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error al leer JSON: " + e.getMessage()));
         }
 
-        // Subir foto de evidencia a Supabase (si existe)
-        if (archivo != null && !archivo.isEmpty()) {
-            String urlImagen = storageService.subirImagen(archivo);
+        try {
+            // 2. Subir Foto a Supabase (si el usuario mandó una)
+            if (archivo != null && !archivo.isEmpty()) {
+                String urlImagen = storageService.subirImagen(archivo);
+                solicitudRecoleccion.setFotoEvidencia(urlImagen); 
+            }
+
+            // 3. Vincular Usuario Solicitante (Evita errores de "usuario detached")
+            if (solicitudRecoleccion.getSolicitante() != null && solicitudRecoleccion.getSolicitante().getCedula() != null) {
+                 Usuario usuarioReal = usuarioService.findById(solicitudRecoleccion.getSolicitante().getCedula());
+                 if (usuarioReal != null) {
+                     solicitudRecoleccion.setSolicitante(usuarioReal);
+                 } else {
+                     return ResponseEntity.badRequest().body("Usuario solicitante no encontrado.");
+                 }
+            }
+
+            // 4. Fecha por defecto
+            if (solicitudRecoleccion.getFecha_creacion() == null) {
+                solicitudRecoleccion.setFecha_creacion(LocalDateTime.now());
+            }
+
+            // =====================================================================
+            // 5. ¡AQUÍ ESTÁ EL ARREGLO! (Relación Bidireccional)
+            // =====================================================================
+            // Le decimos a cada DetalleEntrega: "Tu padre es esta solicitud"
+            if (solicitudRecoleccion.getDetalles() != null && !solicitudRecoleccion.getDetalles().isEmpty()) {
+                for (DetalleEntrega detalle : solicitudRecoleccion.getDetalles()) {
+                    detalle.setSolicitud(solicitudRecoleccion); 
+                }
+            }
+
+            // 6. Guardar en BD (El CascadeType.ALL guardará los detalles automáticamente)
+            SolicitudRecoleccion nueva = solicitudRecoleccionService.save(solicitudRecoleccion);
+            return ResponseEntity.status(HttpStatus.CREATED).body(nueva);
+
+        } catch (Exception e) {
+            e.printStackTrace(); // Esto te mostrará el error exacto en la consola si falla
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("mensaje", "Error interno al guardar: " + e.getMessage()));
         }
-
-
-        if (solicitudRecoleccion.getSolicitante() != null && solicitudRecoleccion.getSolicitante().getCedula() != null) {
-             Usuario usuarioReal = usuarioService.findById(solicitudRecoleccion.getSolicitante().getCedula());
-             if (usuarioReal != null) {
-                 solicitudRecoleccion.setSolicitante(usuarioReal);
-             }
-        }
-
-        SolicitudRecoleccion nueva = solicitudRecoleccionService.save(solicitudRecoleccion);
-        return ResponseEntity.status(HttpStatus.CREATED).body(nueva);
     }
 
     @GetMapping("/solicitud_recolecciones/contar/{cedula}")
     public long contarRecoleccionesUsuario(@PathVariable Long cedula) {
         return solicitudRecoleccionService.contarEntregasAprobadas(cedula);
     }
-
 
     @PutMapping("/solicitud_recolecciones/{id}")
     @Transactional
@@ -117,9 +146,11 @@ public class SolicitudRecoleccionRestController {
         String nuevoEstado = solicitudDetails.getEstado();
 
         solicitudActual.setEstado(nuevoEstado);
-        solicitudActual.setFecha_recoleccion_real(solicitudDetails.getFecha_recoleccion_real());
+        
+        if(solicitudDetails.getFecha_recoleccion_real() != null) {
+            solicitudActual.setFecha_recoleccion_real(solicitudDetails.getFecha_recoleccion_real());
+        }
 
-        // LÓGICA DE PUNTOS Y RANGOS (INTACTA)
         if ("FINALIZADO".equals(nuevoEstado)) {
 
             Integer puntosGanados = solicitudDetails.getPuntos_ganados();
@@ -151,8 +182,7 @@ public class SolicitudRecoleccionRestController {
                 }
             }
 
-            usuarioService.save(usuario); // Usamos la interfaz
-            
+            usuarioService.save(usuario); 
             validarYOtorgarLogros(usuario);
         }
 
