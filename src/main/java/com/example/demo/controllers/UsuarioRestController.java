@@ -122,14 +122,17 @@ public class UsuarioRestController {
 	                    .body(Map.of("mensaje", "Cuenta creada. Revisa tu correo.", "necesita_verificacion", true));
 
 	        } catch (Exception e) {
-	            e.printStackTrace(); 
-
+	            System.err.println("Error enviando correo: " + e.getMessage());
+	            
 	            try {
-	                if (nuevoUsuario.getRoles() != null && !nuevoUsuario.getRoles().isEmpty()) {
-	                     usuarioRolDao.deleteAll(nuevoUsuario.getRoles());
+	                List<UsuarioRol> rolesGuardados = usuarioRolDao.findByUsuario_Cedula(nuevoUsuario.getCedula());
+	                
+	                if (rolesGuardados != null && !rolesGuardados.isEmpty()) {
+	                    usuarioRolDao.deleteAll(rolesGuardados);
 	                }
+	                
 	            } catch (Exception exRoles) {
-	                System.err.println("Error intentando borrar roles: " + exRoles.getMessage());
+	                System.err.println("No se pudieron borrar los roles: " + exRoles.getMessage());
 	            }
 
 	            usuarioService.delete(nuevoUsuario.getCedula());
