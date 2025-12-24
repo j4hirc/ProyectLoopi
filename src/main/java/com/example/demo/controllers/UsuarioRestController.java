@@ -5,14 +5,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import java.util.stream.Collectors;
+import javax.naming.directory.Attribute;
+import javax.naming.directory.Attributes;
+import javax.naming.directory.DirContext;
+import javax.naming.directory.InitialDirContext;
+import java.util.Hashtable;
 
 import com.example.demo.models.entity.Usuario;
 import com.example.demo.models.DAO.IRolDao;
@@ -72,10 +75,8 @@ public class UsuarioRestController {
 
 	    String email = usuario.getCorreo();
 	    String dominio = email.substring(email.indexOf("@") + 1);
-	    try {
-	        InetAddress.getByName(dominio);
-	    } catch (UnknownHostException e) {
-	        return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El dominio del correo (@" + dominio + ") no existe o no es válido."));
+	    if (!tieneRegistrosMX(dominio)) {
+	        return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: El dominio @" + dominio + " no es válido para recibir correos (No tiene registros MX)."));
 	    }
 
 	    if (usuario.getPassword() != null) {
@@ -145,6 +146,21 @@ public class UsuarioRestController {
 	    }
 	}
 	
+	
+	private boolean tieneRegistrosMX(String dominio) {
+	    try {
+	        Hashtable<String, String> env = new Hashtable<>();
+	        env.put("java.naming.factory.initial", "com.sun.jndi.dns.DnsContextFactory");
+	        DirContext ictx = new InitialDirContext(env);   
+	        Attributes attrs = ictx.getAttributes(dominio, new String[] { "MX" });
+	        Attribute attr = attrs.get("MX");
+	     
+	        return (attr != null && attr.size() > 0);
+	    } catch (Exception e) {
+
+	        return false;
+	    }
+	}
 	
 
     @PostMapping("/usuarios/verificar")
