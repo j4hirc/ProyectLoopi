@@ -5,11 +5,16 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile; // Importante
+
+import com.fasterxml.jackson.databind.ObjectMapper; // Importante
 
 import com.example.demo.models.entity.Auspiciante;
 import com.example.demo.models.service.IAuspicianteService;
+import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de Nube
 
 @RestController
 @RequestMapping("/api")
@@ -18,6 +23,12 @@ public class AuspicianteRestController {
 	
 	@Autowired
 	private IAuspicianteService auspicianteService;
+
+    // 1. Inyectamos Supabase
+    @Autowired
+    private SupabaseStorageService storageService;
+
+    private ObjectMapper objectMapper = new ObjectMapper();
 
 	@GetMapping("/auspiciantes")
 	public List<Auspiciante> index() {
@@ -33,17 +44,29 @@ public class AuspicianteRestController {
 		return ResponseEntity.ok(auspiciante);
 	}
 
-	@PostMapping("/auspiciantes")
-	public ResponseEntity<?> create(@RequestBody Auspiciante auspiciante) {
-		// 1. Validar si ya existe por nombre o código
+    // =================================================================
+    // CREAR AUSPICIANTE (Con Logo)
+    // =================================================================
+	@PostMapping(value = "/auspiciantes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<?> create(
+            @RequestParam("datos") String datosJson, 
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo
+    ) {
+        Auspiciante auspiciante;
+        try {
+            auspiciante = objectMapper.readValue(datosJson, Auspiciante.class);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+        }
+
+		// 1. Validar si ya existe por nombre o código (Tu lógica original)
 		List<Auspiciante> todos = auspicianteService.findAll();
 		
 		boolean existeNombre = todos.stream()
 				.anyMatch(a -> a.getNombre().equalsIgnoreCase(auspiciante.getNombre()));
 		
 		if (existeNombre) {
-			return ResponseEntity.badRequest()
-					.body(Map.of("mensaje", "Ya existe un auspiciante con ese nombre."));
+			return ResponseEntity.badRequest().body(Map.of("mensaje", "Ya existe un auspiciante con ese nombre."));
 		}
 
 		if (auspiciante.getCodigo() != null) {
@@ -51,48 +74,72 @@ public class AuspicianteRestController {
 					.anyMatch(a -> a.getCodigo() != null && a.getCodigo().equalsIgnoreCase(auspiciante.getCodigo()));
 			
 			if (existeCodigo) {
-				return ResponseEntity.badRequest()
-						.body(Map.of("mensaje", "Ya existe un auspiciante con ese código."));
+				return ResponseEntity.badRequest().body(Map.of("mensaje", "Ya existe un auspiciante con ese código."));
 			}
 		}
+
+        // 2. Subir Logo a Supabase
+        if (archivo != null && !archivo.isEmpty()) {
+            String urlImagen = storageService.subirImagen(archivo);
+            auspiciante.setImagen(urlImagen);
+        }
 
 		return ResponseEntity.status(HttpStatus.CREATED).body(auspicianteService.save(auspiciante));
 	}
 
-	@PutMapping("/auspiciantes/{id}")
-	public ResponseEntity<?> update(@RequestBody Auspiciante auspiciante, @PathVariable Long id) {
-		Auspiciante auspicianteActual = auspicianteService.findById(id);
+    // =================================================================
+    // ACTUALIZAR AUSPICIANTE
+    // =================================================================
+	@PutMapping(value = "/auspiciantes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<?> update(
+            @PathVariable Long id,
+            @RequestParam("datos") String datosJson, 
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo
+    ) {
+        Auspiciante auspicianteInput;
+        try {
+            auspicianteInput = objectMapper.readValue(datosJson, Auspiciante.class);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+        }
 
+		Auspiciante auspicianteActual = auspicianteService.findById(id);
 		if (auspicianteActual == null) {
 			return ResponseEntity.notFound().build();
 		}
 
-		// 1. Validar duplicados al editar (excluyendo al actual)
+		// 1. Validar duplicados al editar (Tu lógica original)
 		List<Auspiciante> todos = auspicianteService.findAll();
 
 		boolean nombreDuplicado = todos.stream()
-				.anyMatch(a -> !a.getId_auspiciante().equals(id) && a.getNombre().equalsIgnoreCase(auspiciante.getNombre()));
+				.anyMatch(a -> !a.getId_auspiciante().equals(id) && a.getNombre().equalsIgnoreCase(auspicianteInput.getNombre()));
 
 		if (nombreDuplicado) {
-			return ResponseEntity.badRequest()
-					.body(Map.of("mensaje", "Ya existe otro auspiciante con ese nombre."));
+			return ResponseEntity.badRequest().body(Map.of("mensaje", "Ya existe otro auspiciante con ese nombre."));
 		}
 
-		if (auspiciante.getCodigo() != null) {
+		if (auspicianteInput.getCodigo() != null) {
 			boolean codigoDuplicado = todos.stream()
 					.anyMatch(a -> !a.getId_auspiciante().equals(id) && 
 								   a.getCodigo() != null && 
-								   a.getCodigo().equalsIgnoreCase(auspiciante.getCodigo()));
+								   a.getCodigo().equalsIgnoreCase(auspicianteInput.getCodigo()));
 			if (codigoDuplicado) {
-				return ResponseEntity.badRequest()
-						.body(Map.of("mensaje", "Ya existe otro auspiciante con ese código."));
+				return ResponseEntity.badRequest().body(Map.of("mensaje", "Ya existe otro auspiciante con ese código."));
 			}
 		}
 
-		auspicianteActual.setNombre(auspiciante.getNombre());
-		auspicianteActual.setDescripcion(auspiciante.getDescripcion());
-		auspicianteActual.setImagen(auspiciante.getImagen());
-		auspicianteActual.setCodigo(auspiciante.getCodigo());
+        // 2. Subir Logo nuevo si existe
+        if (archivo != null && !archivo.isEmpty()) {
+            String urlImagen = storageService.subirImagen(archivo);
+            auspicianteActual.setImagen(urlImagen);
+        }
+
+        // 3. Actualizar campos
+		auspicianteActual.setNombre(auspicianteInput.getNombre());
+		auspicianteActual.setDescripcion(auspicianteInput.getDescripcion());
+		auspicianteActual.setCodigo(auspicianteInput.getCodigo());
+        
+        // No tocamos la imagen si no enviaron archivo nuevo
 
 		return ResponseEntity.status(HttpStatus.CREATED).body(auspicianteService.save(auspicianteActual));
 	}

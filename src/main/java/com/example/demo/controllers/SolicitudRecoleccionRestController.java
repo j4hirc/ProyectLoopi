@@ -2,13 +2,18 @@ package com.example.demo.controllers;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile; // Importante
+
+import com.fasterxml.jackson.databind.ObjectMapper; // Importante
 
 import com.example.demo.models.entity.Logro;
 import com.example.demo.models.entity.Notificacion;
@@ -21,14 +26,16 @@ import com.example.demo.models.service.INotificacionService;
 import com.example.demo.models.service.IRangoService;
 import com.example.demo.models.service.ISolicitudRecoleccionService;
 import com.example.demo.models.service.IUsuarioLogroService;
-import com.example.demo.models.service.UsuarioServiceImpl;
+import com.example.demo.models.service.IUsuarioService;
+import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de Nube
 
 @RestController
 @RequestMapping("/api")
 @CrossOrigin(origins = "*")
 public class SolicitudRecoleccionRestController {
 
-    private final UsuarioServiceImpl usuarioServiceImpl;
+    @Autowired
+    private IUsuarioService usuarioService; // Usamos la interfaz
     
     @Autowired
     private ISolicitudRecoleccionService solicitudRecoleccionService;
@@ -39,28 +46,55 @@ public class SolicitudRecoleccionRestController {
     @Autowired
     private IRangoService rangoService;
 
-    // --- 1. INYECTAMOS SERVICIOS DE LOGROS ---
     @Autowired
     private ILogroService logroService;
 
     @Autowired
     private IUsuarioLogroService usuarioLogroService;
 
-    SolicitudRecoleccionRestController(UsuarioServiceImpl usuarioServiceImpl) {
-        this.usuarioServiceImpl = usuarioServiceImpl;
-    }
 
-    // ... (Tus métodos GET y POST siguen igual) ...
+    @Autowired
+    private SupabaseStorageService storageService;
+
+    private ObjectMapper objectMapper = new ObjectMapper();
+
     @GetMapping("/solicitud_recolecciones")
     public List<SolicitudRecoleccion> indext() { return solicitudRecoleccionService.findAll(); }
 
     @GetMapping("/solicitud_recolecciones/{id}")
     public SolicitudRecoleccion show(@PathVariable Long id) { return solicitudRecoleccionService.findById(id); }
 
-    @PostMapping("/solicitud_recolecciones")
-    @ResponseStatus(HttpStatus.CREATED)
-    public SolicitudRecoleccion create(@RequestBody SolicitudRecoleccion solicitudRecoleccion) {
-        return solicitudRecoleccionService.save(solicitudRecoleccion);
+    // =================================================================
+    // CREAR SOLICITUD (Con Foto de Evidencia)
+    // =================================================================
+    @PostMapping(value = "/solicitud_recolecciones", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> create(
+            @RequestParam("datos") String datosJson, 
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo
+    ) {
+        SolicitudRecoleccion solicitudRecoleccion;
+        try {
+            // Convertir JSON a Objeto
+            solicitudRecoleccion = objectMapper.readValue(datosJson, SolicitudRecoleccion.class);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+        }
+
+        // Subir foto de evidencia a Supabase (si existe)
+        if (archivo != null && !archivo.isEmpty()) {
+            String urlImagen = storageService.subirImagen(archivo);
+        }
+
+
+        if (solicitudRecoleccion.getSolicitante() != null && solicitudRecoleccion.getSolicitante().getCedula() != null) {
+             Usuario usuarioReal = usuarioService.findById(solicitudRecoleccion.getSolicitante().getCedula());
+             if (usuarioReal != null) {
+                 solicitudRecoleccion.setSolicitante(usuarioReal);
+             }
+        }
+
+        SolicitudRecoleccion nueva = solicitudRecoleccionService.save(solicitudRecoleccion);
+        return ResponseEntity.status(HttpStatus.CREATED).body(nueva);
     }
 
     @GetMapping("/solicitud_recolecciones/contar/{cedula}")
@@ -68,7 +102,7 @@ public class SolicitudRecoleccionRestController {
         return solicitudRecoleccionService.contarEntregasAprobadas(cedula);
     }
 
-    // --- AQUÍ ESTÁ LA MAGIA ---
+
     @PutMapping("/solicitud_recolecciones/{id}")
     @Transactional
     public ResponseEntity<?> update(@RequestBody SolicitudRecoleccion solicitudDetails, @PathVariable Long id) {
@@ -85,6 +119,7 @@ public class SolicitudRecoleccionRestController {
         solicitudActual.setEstado(nuevoEstado);
         solicitudActual.setFecha_recoleccion_real(solicitudDetails.getFecha_recoleccion_real());
 
+        // LÓGICA DE PUNTOS Y RANGOS (INTACTA)
         if ("FINALIZADO".equals(nuevoEstado)) {
 
             Integer puntosGanados = solicitudDetails.getPuntos_ganados();
@@ -99,12 +134,10 @@ public class SolicitudRecoleccionRestController {
                 return ResponseEntity.badRequest().body("La solicitud no tiene usuario asociado");
             }
 
-            // Sumar puntos de forma segura
             int puntosActuales = (usuario.getPuntos_actuales() != null) ? usuario.getPuntos_actuales() : 0;
             usuario.setPuntos_actuales(puntosActuales + puntosGanados);
             solicitudActual.setPuntos_ganados(puntosGanados);
 
-            // --- LÓGICA DE RANGO (La que ya tenías) ---
             long historialAprobado = solicitudRecoleccionService.contarEntregasAprobadas(usuario.getCedula());
             long totalRecolecciones = historialAprobado + 1; 
             long idRangoCalculado = (totalRecolecciones / 25) + 1;
@@ -118,15 +151,13 @@ public class SolicitudRecoleccionRestController {
                 }
             }
 
-            usuarioServiceImpl.save(usuario);
+            usuarioService.save(usuario); // Usamos la interfaz
             
-            // --- 2. VALIDACIÓN AUTOMÁTICA DE LOGROS ---
             validarYOtorgarLogros(usuario);
         }
 
         solicitudRecoleccionService.saveDirect(solicitudActual);
 
-        // Notificaciones de estado
         if (estadoAnterior == null || !estadoAnterior.equals(nuevoEstado)) {
             Usuario destinatario = solicitudActual.getSolicitante();
             if (destinatario != null) {
@@ -144,40 +175,25 @@ public class SolicitudRecoleccionRestController {
         return ResponseEntity.ok(solicitudActual);
     }
 
-    // --- MÉTODO PRIVADO PARA VALIDAR LOGROS DINÁMICAMENTE ---
     private void validarYOtorgarLogros(Usuario usuario) {
-        // 1. Obtenemos puntos actuales
         int misPuntos = (usuario.getPuntos_actuales() != null) ? usuario.getPuntos_actuales() : 0;
-
-        // 2. Traemos TODOS los logros de la BD (Lo que creaste en el CRUD)
         List<Logro> todosLosLogros = logroService.findAll();
-
-        // 3. Traemos los que YA TIENE el usuario
         List<UsuarioLogro> misLogros = usuarioLogroService.findByUsuarioCedula(usuario.getCedula());
         List<Long> idsMisLogros = misLogros.stream().map(ul -> ul.getLogro().getId_logro()).collect(Collectors.toList());
 
-        // 4. Comparamos
         for (Logro logro : todosLosLogros) {
-            // Si ya lo tiene, pasamos al siguiente
             if (idsMisLogros.contains(logro.getId_logro())) continue;
 
-            // REGLA: Si mis puntos >= puntos del logro, ME LO GANO
-            // (Asumiendo que 'puntos_ganados' en la entidad Logro es la meta requerida)
             if (logro.getPuntos_ganados() != null && misPuntos >= logro.getPuntos_ganados()) {
-                
                 UsuarioLogro nuevo = new UsuarioLogro();
                 nuevo.setUsuario(usuario);
                 nuevo.setLogro(logro);
-                // La fecha se pone sola en @PrePersist
                 usuarioLogroService.save(nuevo);
-
-                // Notificación al usuario
                 crearNotificacion(usuario, "LOGRO", "¡Nueva Insignia! 🏅", "Has desbloqueado: " + logro.getNombre());
             }
         }
     }
 
-    // Método auxiliar para notificaciones
     private void crearNotificacion(Usuario usuario, String tipo, String titulo, String mensaje) {
         Notificacion noti = new Notificacion();
         noti.setUsuario(usuario);
@@ -190,7 +206,6 @@ public class SolicitudRecoleccionRestController {
         notificacionService.save(noti);
     }
 
-    // ... (Tus métodos Delete y Get auxiliares siguen igual) ...
     @DeleteMapping("/solicitud_recolecciones/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) { solicitudRecoleccionService.delete(id); }
@@ -205,6 +220,6 @@ public class SolicitudRecoleccionRestController {
     public List<SolicitudRecoleccion> listarPorUsuario(@PathVariable Long cedula) {
         return solicitudRecoleccionService.findAll().stream()
                 .filter(s -> s.getSolicitante() != null && s.getSolicitante().getCedula().equals(cedula))
-                .toList();
+                .collect(Collectors.toList());
     }
 }

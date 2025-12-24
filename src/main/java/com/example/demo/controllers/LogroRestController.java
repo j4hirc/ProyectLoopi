@@ -1,33 +1,35 @@
 package com.example.demo.controllers;
 
 import java.util.List;
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile; // Importante para archivos
 
+import com.fasterxml.jackson.databind.ObjectMapper; // Importante para JSON
 
 import com.example.demo.models.entity.Logro;
 import com.example.demo.models.service.ILogroService;
-
+import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de nube
 
 @RestController
 @RequestMapping("/api")
 @CrossOrigin(origins = "*")
 public class LogroRestController {
 
-	
 	@Autowired
 	private ILogroService logroService;
 
+    // 1. Inyectamos el servicio de almacenamiento
+    @Autowired
+    private SupabaseStorageService storageService;
+
+    // 2. Herramienta para leer JSON
+    private ObjectMapper objectMapper = new ObjectMapper();
 
 	@GetMapping("/logros")
 	public List<Logro> indext() {
@@ -35,26 +37,76 @@ public class LogroRestController {
 	}
 
 	@GetMapping("/logros/{id}")
-	public Logro show(@PathVariable Long id) {
-		return logroService.findById(id);
+	public ResponseEntity<?> show(@PathVariable Long id) {
+		Logro logro = logroService.findById(id);
+        if (logro == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(logro);
 	}
 
-	@PostMapping("/logros")
-	@ResponseStatus(HttpStatus.CREATED)
-	public Logro create(@RequestBody Logro logro) {
-		return logroService.save(logro);
+    // =================================================================
+    // CREAR LOGRO (Con imagen opcional)
+    // =================================================================
+	@PostMapping(value = "/logros", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<?> create(
+            @RequestParam("datos") String datosJson, 
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo
+    ) {
+        Logro logro;
+        try {
+            // Convertir texto JSON a Objeto
+            logro = objectMapper.readValue(datosJson, Logro.class);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+        }
+
+        // Subir imagen a Supabase
+        if (archivo != null && !archivo.isEmpty()) {
+            String urlImagen = storageService.subirImagen(archivo);
+            logro.setImagen_logro(urlImagen);
+        }
+
+		Logro nuevo = logroService.save(logro);
+        return ResponseEntity.status(HttpStatus.CREATED).body(nuevo);
 	}
 
-	@PutMapping("/logros/{id}")
-	public Logro update(@RequestBody Logro logro, @PathVariable Long id) {
-		Logro LogroActual = logroService.findById(id);
+    // =================================================================
+    // ACTUALIZAR LOGRO
+    // =================================================================
+	@PutMapping(value = "/logros/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<?> update(
+            @PathVariable Long id, 
+            @RequestParam("datos") String datosJson, 
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo
+    ) {
+        Logro logroInput;
+        try {
+            logroInput = objectMapper.readValue(datosJson, Logro.class);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+        }
 
-		LogroActual.setNombre(logro.getNombre());
-		LogroActual.setDescripcion(logro.getDescripcion());
-		LogroActual.setImagen_logro(logro.getImagen_logro());
-		LogroActual.setPuntos_ganados(logro.getPuntos_ganados());
+		Logro logroActual = logroService.findById(id);
+        if (logroActual == null) {
+            return ResponseEntity.notFound().build();
+        }
 
-		return logroService.save(LogroActual);
+        // 1. Si mandan nueva imagen, la subimos
+        if (archivo != null && !archivo.isEmpty()) {
+            String urlImagen = storageService.subirImagen(archivo);
+            logroActual.setImagen_logro(urlImagen);
+        }
+
+        // 2. Actualizar campos
+        if (logroInput.getNombre() != null) logroActual.setNombre(logroInput.getNombre());
+        if (logroInput.getDescripcion() != null) logroActual.setDescripcion(logroInput.getDescripcion());
+        if (logroInput.getPuntos_ganados() != null) logroActual.setPuntos_ganados(logroInput.getPuntos_ganados());
+        
+        // No tocamos la imagen si no enviaron archivo nuevo (se mantiene la vieja)
+
+		Logro actualizado = logroService.save(logroActual);
+        return ResponseEntity.status(HttpStatus.CREATED).body(actualizado);
 	}
 
 	@DeleteMapping("/logros/{id}")
@@ -62,8 +114,4 @@ public class LogroRestController {
 	public void delete(@PathVariable Long id) {
 		logroService.delete(id);
 	}
-	
-	
-
-
 }
