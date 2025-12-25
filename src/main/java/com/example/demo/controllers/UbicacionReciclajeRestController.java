@@ -1,6 +1,7 @@
 package com.example.demo.controllers;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList; // Agregado para usar new ArrayList<>() sin escribir todo el paquete
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -13,11 +14,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; // IMPORTANTE PARA LA HORA
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; 
 
-import com.example.demo.models.entity.HorarioReciclador; // IMPORTANTE
+import com.example.demo.models.entity.HorarioReciclador;
 import com.example.demo.models.entity.Notificacion;
-import com.example.demo.models.entity.UbicacionMaterial; // IMPORTANTE
+import com.example.demo.models.entity.UbicacionMaterial;
 import com.example.demo.models.entity.UbicacionReciclaje;
 import com.example.demo.models.entity.Usuario;
 import com.example.demo.models.service.INotificacionService;
@@ -42,7 +43,6 @@ public class UbicacionReciclajeRestController {
     @Autowired
     private INotificacionService notificacionService;
     
-    // 1. CONFIGURAR MAPPER PARA HORAS (LocalTime)
     private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @GetMapping("/ubicacion_reciclajes")
@@ -60,7 +60,7 @@ public class UbicacionReciclajeRestController {
     }
 
     // =================================================================
-    // CREAR (CON HORARIOS Y MATERIALES)
+    // CREAR 
     // =================================================================
     @PostMapping(value = "/ubicacion_reciclajes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> create(
@@ -81,7 +81,7 @@ public class UbicacionReciclajeRestController {
             ubicacionReciclaje.setFoto(urlImagen); 
         }
     
-        // B. VINCULAR RECICLADOR (SI EXISTE)
+        // B. VINCULAR RECICLADOR
         if (ubicacionReciclaje.getReciclador() != null && ubicacionReciclaje.getReciclador().getCedula() != null) {
             Usuario recicladorReal = usuarioService.findById(ubicacionReciclaje.getReciclador().getCedula());
             if (recicladorReal != null) {
@@ -91,65 +91,63 @@ public class UbicacionReciclajeRestController {
             }
         }
 
-        // C. VINCULAR HORARIOS (¡ESTO FALTABA!)
+        // C. VINCULAR HORARIOS
         if (ubicacionReciclaje.getHorarios() != null) {
             for (HorarioReciclador h : ubicacionReciclaje.getHorarios()) {
-                h.setUbicacion(ubicacionReciclaje); // El hijo conoce al padre
+                h.setUbicacion(ubicacionReciclaje); 
             }
         }
 
-        // D. VINCULAR MATERIALES (¡ESTO FALTABA!)
+        // D. VINCULAR MATERIALES
         if (ubicacionReciclaje.getMaterialesAceptados() != null) {
             for (UbicacionMaterial m : ubicacionReciclaje.getMaterialesAceptados()) {
-                m.setUbicacion(ubicacionReciclaje); // El hijo conoce al padre
+                m.setUbicacion(ubicacionReciclaje); 
             }
         }
 
-        // E. GUARDAR
         UbicacionReciclaje nuevo = ubicacionReciclajeService.save(ubicacionReciclaje);
         
-        // F. NOTIFICAR
         notificarUsuariosNormales(nuevo);
         
         return ResponseEntity.status(HttpStatus.CREATED).body(nuevo);
     }
     
     private void notificarUsuariosNormales(UbicacionReciclaje nuevoPunto) {
-        List<Usuario> todos = usuarioService.findAll();
+        try {
+            List<Usuario> todos = usuarioService.findAll();
+            List<Usuario> usuariosNormales = todos.stream()
+                .filter(u -> u.getRoles() != null && u.getRoles().stream()
+                    .anyMatch(usuarioRol -> 
+                        usuarioRol.getRol() != null && 
+                        usuarioRol.getRol().getId_rol() == 1L 
+                    )) 
+                .collect(Collectors.toList());
 
-        List<Usuario> usuariosNormales = todos.stream()
-            .filter(u -> u.getRoles() != null && u.getRoles().stream()
-                .anyMatch(usuarioRol -> 
-                    usuarioRol.getRol() != null && 
-                    usuarioRol.getRol().getId_rol() == 1L 
-                )) 
-            .collect(Collectors.toList());
+            String titulo = "Nuevo Punto de Reciclaje ♻️";
+            String mensaje = "Se ha habilitado: " + nuevoPunto.getNombre() + ". ¡Míralo en el mapa!";
 
-        String titulo = "Nuevo Punto de Reciclaje ♻️";
-        String mensaje = "Se ha habilitado: " + nuevoPunto.getNombre() + ". ¡Míralo en el mapa!";
+            for (Usuario u : usuariosNormales) {
+                Notificacion noti = new Notificacion();
+                noti.setUsuario(u);
+                noti.setTitulo(titulo);
+                noti.setMensaje(mensaje);
+                noti.setFecha_creacion(LocalDateTime.now());
+                noti.setLeido(false);
+                noti.setTipo("SISTEMA");
+                noti.setEntidad_referencia("UBICACION");
+                
+                Long idRef = nuevoPunto.getId_ubicacion_reciclaje(); 
+                noti.setId_referencia(idRef);
 
-        for (Usuario u : usuariosNormales) {
-            Notificacion noti = new Notificacion();
-            noti.setUsuario(u);
-            noti.setTitulo(titulo);
-            noti.setMensaje(mensaje);
-            noti.setFecha_creacion(LocalDateTime.now());
-            noti.setLeido(false);
-            noti.setTipo("SISTEMA");
-            noti.setEntidad_referencia("UBICACION");
-            
-            Long idRef = (nuevoPunto.getId_ubicacion_reciclaje() != null) 
-                          ? nuevoPunto.getId_ubicacion_reciclaje() 
-                          : nuevoPunto.getId_ubicacion_reciclaje(); 
-            noti.setId_referencia(idRef);
-
-            notificacionService.save(noti);
+                notificacionService.save(noti);
+            }
+        } catch (Exception e) {
+            System.out.println("Error enviando notificaciones (no crítico): " + e.getMessage());
         }
-        System.out.println("Se notificó a " + usuariosNormales.size() + " usuarios normales.");
     }
 
     // ======================================================================
-    // ACTUALIZAR (CON HORARIOS Y MATERIALES)
+    // ACTUALIZAR (CORREGIDO Y BLINDADO)
     // ======================================================================
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
@@ -194,37 +192,38 @@ public class UbicacionReciclajeRestController {
             actualDB.setReciclador(null);
         }
 
-        // 4. ACTUALIZAR HORARIOS (Borrar viejos, poner nuevos)
+        // 4. ACTUALIZAR HORARIOS
         if (ubicacionDatos.getHorarios() != null) {
-            actualDB.getHorarios().clear(); // Gracias a orphanRemoval = true, esto borra en BD
+            // Protección contra null en la lista original
+            if (actualDB.getHorarios() == null) {
+                actualDB.setHorarios(new ArrayList<>());
+            }
+            actualDB.getHorarios().clear(); 
+            
             for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
-                h.setUbicacion(actualDB); // Vincular
+                h.setUbicacion(actualDB); 
                 actualDB.getHorarios().add(h);
             }
         }
 
-        // 5. ACTUALIZAR MATERIALES (Borrar viejos, poner nuevos)
+        // 5. ACTUALIZAR MATERIALES (SOLUCIÓN DEFINITIVA)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            // A. Inicializar la lista si viniera nula de la BD (para evitar NullPointerException)
+            // Protección contra null
             if (actualDB.getMaterialesAceptados() == null) {
-                actualDB.setMaterialesAceptados(new java.util.ArrayList<>());
+                actualDB.setMaterialesAceptados(new ArrayList<>());
             }
 
-            // B. Borrar los antiguos (gracias a orphanRemoval = true en la entidad, esto borra de BD)
+            // Borrar antiguos (orphanRemoval = true elimina en BD)
             actualDB.getMaterialesAceptados().clear();
 
-            // C. Agregar los nuevos "limpios"
+            // Agregar nuevos limpios
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // IMPORTANTE: Creamos una nueva instancia para asegurar que el estado es "New"
+                // Instancia nueva para evitar conflictos de detached entities
                 UbicacionMaterial mNuevo = new UbicacionMaterial();
                 
-                // 1. Vinculamos al Padre (Ubicación)
                 mNuevo.setUbicacion(actualDB);
-                
-                // 2. Vinculamos el Material (solo necesitamos el ID que viene en mInput)
                 mNuevo.setMaterial(mInput.getMaterial()); 
                 
-                // 3. Agregamos a la lista gestionada
                 actualDB.getMaterialesAceptados().add(mNuevo);
             }
         }
