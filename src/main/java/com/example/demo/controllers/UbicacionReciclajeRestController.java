@@ -217,40 +217,44 @@ public class UbicacionReciclajeRestController {
             }
         }
 
-        // 5. ACTUALIZAR MATERIALES (CORREGIDO)
-        if (ubicacionDatos.getMaterialesAceptados() != null) {
+if (ubicacionDatos.getMaterialesAceptados() != null) {
             
-            // A. Inicializar si es nulo
-            if (actualDB.getMaterialesAceptados() == null) {
+            // PASO A: Limpiar la lista actual y GUARDAR para forzar el DELETE en la BD
+            if (actualDB.getMaterialesAceptados() != null) {
+                actualDB.getMaterialesAceptados().clear();
+            } else {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
+            
+            // ¡EL TRUCO! Guardamos el estado "vacío" primero.
+            // Esto obliga a Hibernate a ejecutar: DELETE FROM ubicacion_material WHERE...
+            actualDB = ubicacionReciclajeService.save(actualDB); 
 
-            // B. Limpiar la lista (esto marcará los viejos para borrar)
-            actualDB.getMaterialesAceptados().clear();
-
-            // C. Agregar los nuevos
+            // PASO B: Crear la lista de nuevos materiales
+            List<UbicacionMaterial> nuevosMateriales = new ArrayList<>();
+            
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                
-                // Verificamos que traiga un ID de material
                 if (mInput.getMaterial() != null && mInput.getMaterial().getId_material() != null) {
                     
                     UbicacionMaterial nuevoRelacion = new UbicacionMaterial();
                     
-                    // 1. Vincular al Padre (OBLIGATORIO)
+                    // 1. Vincular al Padre (actualDB ya está refrescado por el save anterior)
                     nuevoRelacion.setUbicacion(actualDB);
                     
-                    // 2. Vincular al Material (TRUCO: Crear instancia limpia solo con ID)
-                    // Esto evita que Hibernate intente actualizar el Material o se confunda
+                    // 2. Vincular al Material (Creamos referencia limpia)
                     Material materialRef = new Material();
                     materialRef.setId_material(mInput.getMaterial().getId_material());
                     nuevoRelacion.setMaterial(materialRef);
 
-                    // 3. Agregar a la lista del padre
-                    actualDB.getMaterialesAceptados().add(nuevoRelacion);
+                    nuevosMateriales.add(nuevoRelacion);
                 }
             }
+            
+            // PASO C: Agregar los nuevos a la lista gestionada
+            actualDB.getMaterialesAceptados().addAll(nuevosMateriales);
         }
 
+        // GUARDADO FINAL (Esto ejecutará los INSERT)
         UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
         return ResponseEntity.status(HttpStatus.CREATED).body(actualizado);
     }
