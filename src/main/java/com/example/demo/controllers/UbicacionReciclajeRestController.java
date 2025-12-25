@@ -208,22 +208,28 @@ public class UbicacionReciclajeRestController {
 
         // 5. ACTUALIZAR MATERIALES (SOLUCIÓN DEFINITIVA)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            // Protección contra null
+            System.out.println("--- DEBUG MATERIALES ---");
+            System.out.println("Cantidad recibida del frontend: " + ubicacionDatos.getMaterialesAceptados().size());
+            
             if (actualDB.getMaterialesAceptados() == null) {
-                actualDB.setMaterialesAceptados(new ArrayList<>());
+                actualDB.setMaterialesAceptados(new java.util.ArrayList<>());
             }
-
-            // Borrar antiguos (orphanRemoval = true elimina en BD)
             actualDB.getMaterialesAceptados().clear();
 
-            // Agregar nuevos limpios
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // Instancia nueva para evitar conflictos de detached entities
-                UbicacionMaterial mNuevo = new UbicacionMaterial();
+                // VERIFICAR QUÉ LLEGA
+                if (mInput.getMaterial() == null) {
+                    System.out.println("ERROR: El objeto Material llegó NULO");
+                    continue;
+                }
                 
+                // INTENTAR OBTENER EL ID (Ajusta getId_material o getIdMaterial según tu clase)
+                // Vamos a usar reflexión o toString para ver qué tiene
+                System.out.println("Material recibido: " + mInput.getMaterial().toString()); 
+                
+                UbicacionMaterial mNuevo = new UbicacionMaterial();
                 mNuevo.setUbicacion(actualDB);
                 mNuevo.setMaterial(mInput.getMaterial()); 
-                
                 actualDB.getMaterialesAceptados().add(mNuevo);
             }
         }
