@@ -148,10 +148,7 @@ public class UbicacionReciclajeRestController {
         }
     }
 
-    // ======================================================================
-    // ACTUALIZAR (CON PRESERVACIÓN DE FORMULARIO)
-    // ======================================================================
- // ======================================================================
+ 
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
             @PathVariable Long id,
@@ -213,31 +210,37 @@ public class UbicacionReciclajeRestController {
             }
         }
 
-        // 5. MATERIALES (ESTA ES LA PARTE CORREGIDA)
+        // 5. MATERIALES (ESTA ES LA LÓGICA CORREGIDA)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
+            
+            // A. Asegurar que la lista existe en BD
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
             
-            actualDB.getMaterialesAceptados().clear();
+            // B. Crear una lista TEMPORAL con los nuevos (para no confundir a Hibernate)
+            List<UbicacionMaterial> nuevosParaGuardar = new ArrayList<>();
 
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // Validación de seguridad
+                // Validación estricta
                 if (mInput.getMaterial() == null || mInput.getMaterial().getId_material() == null) {
                     continue; 
                 }
 
-                // --- TRUCO PARA QUE HIBERNATE NO SE QUEJE ---
-                // Creamos un objeto Material nuevo y limpio solo con el ID.
+                // Crear referencia limpia
                 Material materialRef = new Material();
                 materialRef.setId_material(mInput.getMaterial().getId_material());
 
                 UbicacionMaterial mNuevo = new UbicacionMaterial();
                 mNuevo.setUbicacion(actualDB); // Vinculamos al Padre
-                mNuevo.setMaterial(materialRef); // Vinculamos el Material limpio
+                mNuevo.setMaterial(materialRef); // Vinculamos el ID del Material
                 
-                actualDB.getMaterialesAceptados().add(mNuevo);
+                nuevosParaGuardar.add(mNuevo);
             }
+
+            // C. Operación Atómica: Borrar Todo y Agregar Todo
+            actualDB.getMaterialesAceptados().clear();
+            actualDB.getMaterialesAceptados().addAll(nuevosParaGuardar);
         }
 
         UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
