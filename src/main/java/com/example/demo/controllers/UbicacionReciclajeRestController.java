@@ -200,25 +200,37 @@ public class UbicacionReciclajeRestController {
 
         // 4. ACTUALIZAR HORARIOS
         if (ubicacionDatos.getHorarios() != null) {
-            if (actualDB.getHorarios() == null)
-                actualDB.setHorarios(new ArrayList<>());
-
-            // Rescatar formulario para no perder la referencia
-            FormularioReciclador formularioOriginal = null;
+            if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
+            
+            // A. Intentamos rescatar el formulario antiguo por si el JSON viene vacío de eso
+            FormularioReciclador formularioRescatado = null;
             if (!actualDB.getHorarios().isEmpty()) {
-                for (HorarioReciclador h : actualDB.getHorarios()) {
-                    if (h.getFormulario() != null) {
-                        formularioOriginal = h.getFormulario();
-                        break;
+                for(HorarioReciclador h : actualDB.getHorarios()) {
+                    if (h.getFormulario() != null) { 
+                        formularioRescatado = h.getFormulario(); 
+                        break; 
                     }
                 }
             }
-
+            
+            // B. Limpiamos la lista
             actualDB.getHorarios().clear();
+
+            // C. Agregamos los nuevos con lógica inteligente
             for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
-                h.setUbicacion(actualDB);
-                if (formularioOriginal != null)
-                    h.setFormulario(formularioOriginal);
+                h.setUbicacion(actualDB); // Siempre vincular al padre
+                
+                // --- LÓGICA CORREGIDA ---
+                // 1. ¿El JSON trae un Formulario con ID? ¡ÚSALO!
+                if (h.getFormulario() != null && h.getFormulario().getId_formulario() != null) {
+                    // Perfecto, ya lo tiene, no hacemos nada o aseguramos la referencia
+                    // (Hibernate usará el ID que viene en el objeto)
+                } 
+                // 2. Si NO trae, pero teníamos uno rescatado, ¡ÚSALO DE RESPALDO!
+                else if (formularioRescatado != null) {
+                    h.setFormulario(formularioRescatado);
+                }
+                
                 actualDB.getHorarios().add(h);
             }
         }
