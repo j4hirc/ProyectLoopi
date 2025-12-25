@@ -3,6 +3,8 @@ package com.example.demo.models.entity;
 import java.io.Serializable;
 import java.time.LocalTime;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import jakarta.persistence.Entity;
@@ -14,23 +16,43 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-
-
 @Entity
 @Table(name = "horario_reciclador")
 public class HorarioReciclador implements Serializable {
-    private static final long serialVersionUID = 1L;
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id_horario;
+	private static final long serialVersionUID = 1L;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id_horario;
 
-    private String dia_semana;
+	private String dia_semana;
+	@JsonFormat(pattern = "HH:mm:ss") 
     private LocalTime hora_inicio;
+
+    @JsonFormat(pattern = "HH:mm:ss") 
     private LocalTime hora_fin;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_formulario") 
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    private FormularioReciclador formulario; 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "id_formulario")
+	@JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+	private FormularioReciclador formulario;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "id_ubicacion_reciclaje")
+	@JsonIgnore 
+	private UbicacionReciclaje ubicacion;
+
+	
+	
+	
+	
+	
+	public UbicacionReciclaje getUbicacion() {
+		return ubicacion;
+	}
+
+	public void setUbicacion(UbicacionReciclaje ubicacion) {
+		this.ubicacion = ubicacion;
+	}
 
 	public Long getId_horario() {
 		return id_horario;
@@ -71,7 +93,5 @@ public class HorarioReciclador implements Serializable {
 	public void setFormulario(FormularioReciclador formulario) {
 		this.formulario = formulario;
 	}
-    
-    
-    
+
 }

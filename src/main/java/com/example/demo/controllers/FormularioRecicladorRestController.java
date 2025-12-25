@@ -203,32 +203,41 @@ public class FormularioRecicladorRestController {
         nuevaUbi.setLatitud(form.getLatitud());
         nuevaUbi.setLongitud(form.getLongitud());
         nuevaUbi.setReciclador(form.getUsuario());
-        // Puedes reusar la foto del perfil o dejarla null
         nuevaUbi.setFoto(form.getFoto_perfil_profesional()); 
         
-        // 2. CONVERTIR MATERIALES DE FORMULARIO A MATERIALES DE UBICACIÓN
         if (form.getMateriales() != null && !form.getMateriales().isEmpty()) {
             List<UbicacionMaterial> materialesParaUbi = new ArrayList<>();
-            
             for (FormularioRecicladorMaterial matForm : form.getMateriales()) {
                 UbicacionMaterial matUbi = new UbicacionMaterial();
-                
-                // Copiamos la referencia del Material
                 matUbi.setMaterial(matForm.getMaterial()); 
-                
-                // Vinculamos con la NUEVA ubicación
                 matUbi.setUbicacion(nuevaUbi); 
-                
                 materialesParaUbi.add(matUbi);
             }
-            
-            // Asignamos la lista a la ubicación
             nuevaUbi.setMaterialesAceptados(materialesParaUbi);
         }
 
-        // 3. Guardar (El CascadeType.ALL en UbicacionReciclaje guardará los materiales)
+        if (form.getHorarios() != null && !form.getHorarios().isEmpty()) {
+            List<HorarioReciclador> horariosParaUbi = new ArrayList<>();
+            
+            for (HorarioReciclador hForm : form.getHorarios()) {
+                HorarioReciclador hUbi = new HorarioReciclador();
+                
+                hUbi.setDia_semana(hForm.getDia_semana());
+                hUbi.setHora_inicio(hForm.getHora_inicio());
+                hUbi.setHora_fin(hForm.getHora_fin());
+                
+
+                hUbi.setUbicacion(nuevaUbi); 
+                hUbi.setFormulario(null);
+                
+                horariosParaUbi.add(hUbi);
+            }
+            nuevaUbi.setHorarios(horariosParaUbi);
+        }
+
+        // 4. Guardar (CascadeType.ALL guardará materiales y horarios)
         ubicacionReciclajeService.save(nuevaUbi);
-        System.out.println("Ubicación creada con materiales para: " + form.getUsuario().getCedula());
+        System.out.println("Ubicación creada con materiales y horarios.");
     }
 
     private void asignarRolReciclador(Usuario u) {

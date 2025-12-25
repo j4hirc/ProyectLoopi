@@ -49,8 +49,22 @@ public class UbicacionReciclaje implements Serializable {
     @JsonIgnoreProperties({"ubicacion", "hibernateLazyInitializer", "handler"})
     private List<UbicacionMaterial> materialesAceptados;
     
+    @OneToMany(mappedBy = "ubicacion", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true) // <--- ¡AGREGA orphanRemoval = true AQUÍ!
+    @JsonIgnoreProperties("ubicacion")
+    private List<HorarioReciclador> horarios;
     
     
+    
+
+
+	public List<HorarioReciclador> getHorarios() {
+		return horarios;
+	}
+
+
+	public void setHorarios(List<HorarioReciclador> horarios) {
+		this.horarios = horarios;
+	}
 
 
 	public Long getId_ubicacion_reciclaje() {
