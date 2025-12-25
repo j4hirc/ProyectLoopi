@@ -213,29 +213,28 @@ public class UbicacionReciclajeRestController {
             }
         }
 
-        // 5. MATERIALES (LÓGICA BLINDADA)
+        // 5. MATERIALES (ESTA ES LA PARTE CORREGIDA)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
             
-            // Borrar anteriores
             actualDB.getMaterialesAceptados().clear();
 
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
                 // Validación de seguridad
                 if (mInput.getMaterial() == null || mInput.getMaterial().getId_material() == null) {
-                    continue; // Saltamos si viene vacío
+                    continue; 
                 }
 
-                // AQUI ESTA EL TRUCO: Creamos una referencia "Limpia"
-                // No usamos el objeto mInput directo para evitar conflictos de Hibernate
+                // --- TRUCO PARA QUE HIBERNATE NO SE QUEJE ---
+                // Creamos un objeto Material nuevo y limpio solo con el ID.
                 Material materialRef = new Material();
                 materialRef.setId_material(mInput.getMaterial().getId_material());
 
                 UbicacionMaterial mNuevo = new UbicacionMaterial();
                 mNuevo.setUbicacion(actualDB); // Vinculamos al Padre
-                mNuevo.setMaterial(materialRef); // Vinculamos el ID del Material
+                mNuevo.setMaterial(materialRef); // Vinculamos el Material limpio
                 
                 actualDB.getMaterialesAceptados().add(mNuevo);
             }
