@@ -25,46 +25,11 @@ public class UbicacionReciclajeServiceImpl implements IUbicacionReciclajeService
 	}
 		
 	@Override
-	@Transactional
-	public UbicacionReciclaje save(UbicacionReciclaje ubicacion) {
+    @Transactional
+    public UbicacionReciclaje save(UbicacionReciclaje ubicacion) {
 
-		
-		if (ubicacion.getId_ubicacion_reciclaje() != null) {
-			
-			
-			UbicacionReciclaje existente = IUbicacionReciclajeDao.findById(ubicacion.getId_ubicacion_reciclaje()).orElse(null);
-
-			if (existente != null) {
-				existente.setNombre(ubicacion.getNombre());
-				existente.setDireccion(ubicacion.getDireccion());
-				existente.setLatitud(ubicacion.getLatitud());
-				existente.setLongitud(ubicacion.getLongitud());
-				existente.setFoto(ubicacion.getFoto());
-				existente.setParroquia(ubicacion.getParroquia());
-				existente.setReciclador(ubicacion.getReciclador());
-
-				if (ubicacion.getMaterialesAceptados() != null) {
-					for (UbicacionMaterial um : ubicacion.getMaterialesAceptados()) {
-						um.setUbicacion(existente); 
-					}
-				}
-
-				existente.getMaterialesAceptados().clear(); 
-				existente.getMaterialesAceptados().addAll(ubicacion.getMaterialesAceptados());
-
-				return IUbicacionReciclajeDao.save(existente);
-			}
-		}
-
-
-		if (ubicacion.getMaterialesAceptados() != null) {
-			for (UbicacionMaterial um : ubicacion.getMaterialesAceptados()) {
-				um.setUbicacion(ubicacion);
-			}
-		}
-		
-		return IUbicacionReciclajeDao.save(ubicacion);
-	}
+        return IUbicacionReciclajeDao.save(ubicacion);
+    }
 		
 	@Override
 	@Transactional(readOnly = true)

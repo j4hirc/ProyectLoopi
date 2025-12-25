@@ -156,12 +156,12 @@ public class UbicacionReciclajeRestController {
     // ======================================================================
     
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Transactional
+    @Transactional // Mantiene la sesión de hibernate viva
     public ResponseEntity<?> update(
             @PathVariable Long id,
-            @RequestParam("datos") String datosJson, 
-            @RequestParam(value = "archivo", required = false) MultipartFile archivo
-    ) {
+            @RequestParam("datos") String datosJson,
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo) {
+        
         UbicacionReciclaje ubicacionDatos;
         try {
             ubicacionDatos = objectMapper.readValue(datosJson, UbicacionReciclaje.class);
@@ -169,12 +169,12 @@ public class UbicacionReciclajeRestController {
             e.printStackTrace();
             return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
         }
-        
+
         UbicacionReciclaje actualDB = ubicacionReciclajeService.findById(id);
         if (actualDB == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         // 1. FOTO
         if (archivo != null && !archivo.isEmpty()) {
             String urlImagen = storageService.subirImagen(archivo);
@@ -187,7 +187,8 @@ public class UbicacionReciclajeRestController {
         actualDB.setLatitud(ubicacionDatos.getLatitud());
         actualDB.setLongitud(ubicacionDatos.getLongitud());
 
-        if (ubicacionDatos.getParroquia() != null) actualDB.setParroquia(ubicacionDatos.getParroquia());
+        if (ubicacionDatos.getParroquia() != null)
+            actualDB.setParroquia(ubicacionDatos.getParroquia());
 
         // 3. RECICLADOR
         if (ubicacionDatos.getReciclador() != null && ubicacionDatos.getReciclador().getCedula() != null) {
@@ -199,49 +200,56 @@ public class UbicacionReciclajeRestController {
 
         // 4. ACTUALIZAR HORARIOS
         if (ubicacionDatos.getHorarios() != null) {
-            if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
-            
-            // Rescatar formulario
+            if (actualDB.getHorarios() == null)
+                actualDB.setHorarios(new ArrayList<>());
+
+            // Rescatar formulario para no perder la referencia
             FormularioReciclador formularioOriginal = null;
             if (!actualDB.getHorarios().isEmpty()) {
-                for(HorarioReciclador h : actualDB.getHorarios()) {
-                    if (h.getFormulario() != null) { formularioOriginal = h.getFormulario(); break; }
+                for (HorarioReciclador h : actualDB.getHorarios()) {
+                    if (h.getFormulario() != null) {
+                        formularioOriginal = h.getFormulario();
+                        break;
+                    }
                 }
             }
-            
+
             actualDB.getHorarios().clear();
             for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
                 h.setUbicacion(actualDB);
-                if (formularioOriginal != null) h.setFormulario(formularioOriginal);
+                if (formularioOriginal != null)
+                    h.setFormulario(formularioOriginal);
                 actualDB.getHorarios().add(h);
             }
         }
 
-if (ubicacionDatos.getMaterialesAceptados() != null) {
-            
-            // PASO A: Limpiar la lista actual y GUARDAR para forzar el DELETE en la BD
+        // 5. ACTUALIZAR MATERIALES (ESTRATEGIA DOBLE SAVE)
+        // Esta lógica asegura que se borren los viejos y se inserten los nuevos sin conflicto
+        if (ubicacionDatos.getMaterialesAceptados() != null) {
+
+            // PASO A: Limpiar la lista actual en memoria
             if (actualDB.getMaterialesAceptados() != null) {
                 actualDB.getMaterialesAceptados().clear();
             } else {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
-            
-            // ¡EL TRUCO! Guardamos el estado "vacío" primero.
-            // Esto obliga a Hibernate a ejecutar: DELETE FROM ubicacion_material WHERE...
-            actualDB = ubicacionReciclajeService.save(actualDB); 
 
-            // PASO B: Crear la lista de nuevos materiales
+            // PASO B: Guardar PRIMERO el estado vacío.
+            // Esto obliga a la BD a ejecutar los DELETE inmediatamente.
+            actualDB = ubicacionReciclajeService.save(actualDB);
+
+            // PASO C: Crear la lista de nuevos materiales
             List<UbicacionMaterial> nuevosMateriales = new ArrayList<>();
-            
+
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
                 if (mInput.getMaterial() != null && mInput.getMaterial().getId_material() != null) {
-                    
+
                     UbicacionMaterial nuevoRelacion = new UbicacionMaterial();
-                    
+
                     // 1. Vincular al Padre (actualDB ya está refrescado por el save anterior)
                     nuevoRelacion.setUbicacion(actualDB);
-                    
-                    // 2. Vincular al Material (Creamos referencia limpia)
+
+                    // 2. Vincular al Material (Creamos referencia limpia con solo el ID)
                     Material materialRef = new Material();
                     materialRef.setId_material(mInput.getMaterial().getId_material());
                     nuevoRelacion.setMaterial(materialRef);
@@ -249,8 +257,8 @@ if (ubicacionDatos.getMaterialesAceptados() != null) {
                     nuevosMateriales.add(nuevoRelacion);
                 }
             }
-            
-            // PASO C: Agregar los nuevos a la lista gestionada
+
+            // PASO D: Agregar los nuevos a la lista gestionada
             actualDB.getMaterialesAceptados().addAll(nuevosMateriales);
         }
 
