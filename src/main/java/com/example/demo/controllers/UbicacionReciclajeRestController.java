@@ -1,7 +1,7 @@
 package com.example.demo.controllers;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList; // Agregado para usar new ArrayList<>() sin escribir todo el paquete
+import java.util.ArrayList; 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -16,6 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; 
 
+import com.example.demo.models.entity.FormularioReciclador; // <--- IMPORTANTE: Agregado
 import com.example.demo.models.entity.HorarioReciclador;
 import com.example.demo.models.entity.Notificacion;
 import com.example.demo.models.entity.UbicacionMaterial;
@@ -147,7 +148,7 @@ public class UbicacionReciclajeRestController {
     }
 
     // ======================================================================
-    // ACTUALIZAR (CORREGIDO Y BLINDADO)
+    // ACTUALIZAR (CON PRESERVACIÓN DE FORMULARIO)
     // ======================================================================
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
@@ -192,44 +193,57 @@ public class UbicacionReciclajeRestController {
             actualDB.setReciclador(null);
         }
 
-        // 4. ACTUALIZAR HORARIOS
+        // 4. ACTUALIZAR HORARIOS (PRESERVANDO EL FORMULARIO ORIGINAL)
         if (ubicacionDatos.getHorarios() != null) {
             // Protección contra null en la lista original
             if (actualDB.getHorarios() == null) {
                 actualDB.setHorarios(new ArrayList<>());
             }
+
+            // --- A. RESCATAR EL FORMULARIO ANTES DE BORRAR ---
+            FormularioReciclador formularioOriginal = null;
+            if (!actualDB.getHorarios().isEmpty()) {
+                for(HorarioReciclador hViejo : actualDB.getHorarios()) {
+                    if (hViejo.getFormulario() != null) {
+                        formularioOriginal = hViejo.getFormulario();
+                        break; // Con encontrar uno basta
+                    }
+                }
+            }
+            // -------------------------------------------------
+
+            // B. BORRAR (Ahora sí es seguro borrar)
             actualDB.getHorarios().clear(); 
             
             for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
                 h.setUbicacion(actualDB); 
+                
+                // Si rescatamos un formulario, se lo asignamos al horario nuevo
+                if (formularioOriginal != null) {
+                    h.setFormulario(formularioOriginal);
+                }
+
                 actualDB.getHorarios().add(h);
             }
         }
 
-        // 5. ACTUALIZAR MATERIALES (SOLUCIÓN DEFINITIVA)
+  
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            System.out.println("--- DEBUG MATERIALES ---");
-            System.out.println("Cantidad recibida del frontend: " + ubicacionDatos.getMaterialesAceptados().size());
-            
             if (actualDB.getMaterialesAceptados() == null) {
-                actualDB.setMaterialesAceptados(new java.util.ArrayList<>());
+                actualDB.setMaterialesAceptados(new ArrayList<>());
             }
+
+            // Borrar antiguos (orphanRemoval = true elimina en BD)
             actualDB.getMaterialesAceptados().clear();
 
+            // Agregar nuevos limpios
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // VERIFICAR QUÉ LLEGA
-                if (mInput.getMaterial() == null) {
-                    System.out.println("ERROR: El objeto Material llegó NULO");
-                    continue;
-                }
-                
-                // INTENTAR OBTENER EL ID (Ajusta getId_material o getIdMaterial según tu clase)
-                // Vamos a usar reflexión o toString para ver qué tiene
-                System.out.println("Material recibido: " + mInput.getMaterial().toString()); 
-                
+                // Instancia nueva para evitar conflictos de detached entities
                 UbicacionMaterial mNuevo = new UbicacionMaterial();
+                
                 mNuevo.setUbicacion(actualDB);
                 mNuevo.setMaterial(mInput.getMaterial()); 
+                
                 actualDB.getMaterialesAceptados().add(mNuevo);
             }
         }
