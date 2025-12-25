@@ -215,27 +215,32 @@ public class UbicacionReciclajeRestController {
 
         // 5. ACTUALIZAR MATERIALES (CORREGIDO)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            // A. Inicializar lista si es null
+            // A. Inicializar lista si la entidad vino sin ella
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
-            
-            // B. Borrar todo lo anterior
+
+            // B. Limpiar la lista actual (Esto dispara el DELETE por orphanRemoval)
             actualDB.getMaterialesAceptados().clear();
 
-            // C. Agregar los nuevos tal cual vienen (Igual que en CREATE)
+            // C. Agregar los nuevos creando instancias limpias
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // Validación básica de seguridad
+                
+                // Verificamos que traiga un material válido
                 if (mInput.getMaterial() != null && mInput.getMaterial().getId_material() != null) {
                     
-                    // Vinculamos al Padre (la ubicación que estamos editando)
-                    mInput.setUbicacion(actualDB);
+                    // 1. Crear instancia NUEVA (Clave para que Hibernate no se confunda)
+                    UbicacionMaterial nuevoRelacion = new UbicacionMaterial();
                     
-                    // IMPORTANTE: Aseguramos que el ID de la tabla intermedia sea null
-                    // para que Hibernate sepa que es una inserción nueva y no una actualización.
-                    mInput.setId_ubicacion_material(null); 
+                    // 2. Asignar el padre (la ubicación actual)
+                    nuevoRelacion.setUbicacion(actualDB);
                     
-                    actualDB.getMaterialesAceptados().add(mInput);
+                    // 3. Asignar el Material (Usando el que viene del JSON o buscando referencia)
+                    // Es seguro usar el del input porque solo nos importa el ID para la FK
+                    nuevoRelacion.setMaterial(mInput.getMaterial()); 
+                    
+                    // 4. Agregamos a la lista gestionada
+                    actualDB.getMaterialesAceptados().add(nuevoRelacion);
                 }
             }
         }
