@@ -152,7 +152,7 @@ public class UbicacionReciclajeRestController {
     // ACTUALIZAR (CON PRESERVACIÓN DE FORMULARIO)
     // ======================================================================
  // ======================================================================
-    PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @RequestParam("datos") String datosJson, 
