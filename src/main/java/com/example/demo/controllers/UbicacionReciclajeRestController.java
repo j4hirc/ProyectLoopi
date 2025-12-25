@@ -205,10 +205,27 @@ public class UbicacionReciclajeRestController {
 
         // 5. ACTUALIZAR MATERIALES (Borrar viejos, poner nuevos)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            actualDB.getMaterialesAceptados().clear(); // Gracias a orphanRemoval = true
-            for (UbicacionMaterial m : ubicacionDatos.getMaterialesAceptados()) {
-                m.setUbicacion(actualDB); // Vincular
-                actualDB.getMaterialesAceptados().add(m);
+            // A. Inicializar la lista si viniera nula de la BD (para evitar NullPointerException)
+            if (actualDB.getMaterialesAceptados() == null) {
+                actualDB.setMaterialesAceptados(new java.util.ArrayList<>());
+            }
+
+            // B. Borrar los antiguos (gracias a orphanRemoval = true en la entidad, esto borra de BD)
+            actualDB.getMaterialesAceptados().clear();
+
+            // C. Agregar los nuevos "limpios"
+            for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
+                // IMPORTANTE: Creamos una nueva instancia para asegurar que el estado es "New"
+                UbicacionMaterial mNuevo = new UbicacionMaterial();
+                
+                // 1. Vinculamos al Padre (Ubicación)
+                mNuevo.setUbicacion(actualDB);
+                
+                // 2. Vinculamos el Material (solo necesitamos el ID que viene en mInput)
+                mNuevo.setMaterial(mInput.getMaterial()); 
+                
+                // 3. Agregamos a la lista gestionada
+                actualDB.getMaterialesAceptados().add(mNuevo);
             }
         }
 
