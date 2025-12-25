@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,6 +17,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import com.example.demo.models.entity.FormularioReciclador;
 import com.example.demo.models.entity.HorarioReciclador;
+import com.example.demo.models.entity.Material;
 import com.example.demo.models.entity.UbicacionMaterial;
 import com.example.demo.models.entity.UbicacionReciclaje;
 import com.example.demo.models.entity.Usuario;
@@ -152,7 +154,9 @@ public class UbicacionReciclajeRestController {
     // ======================================================================
     // ACTUALIZAR (CORREGIDO PARA MATERIALES)
     // ======================================================================
+    
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @RequestParam("datos") String datosJson, 
@@ -215,31 +219,33 @@ public class UbicacionReciclajeRestController {
 
         // 5. ACTUALIZAR MATERIALES (CORREGIDO)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            // A. Inicializar lista si la entidad vino sin ella
+            
+            // A. Inicializar si es nulo
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
 
-            // B. Limpiar la lista actual (Esto dispara el DELETE por orphanRemoval)
+            // B. Limpiar la lista (esto marcará los viejos para borrar)
             actualDB.getMaterialesAceptados().clear();
 
-            // C. Agregar los nuevos creando instancias limpias
+            // C. Agregar los nuevos
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
                 
-                // Verificamos que traiga un material válido
+                // Verificamos que traiga un ID de material
                 if (mInput.getMaterial() != null && mInput.getMaterial().getId_material() != null) {
                     
-                    // 1. Crear instancia NUEVA (Clave para que Hibernate no se confunda)
                     UbicacionMaterial nuevoRelacion = new UbicacionMaterial();
                     
-                    // 2. Asignar el padre (la ubicación actual)
+                    // 1. Vincular al Padre (OBLIGATORIO)
                     nuevoRelacion.setUbicacion(actualDB);
                     
-                    // 3. Asignar el Material (Usando el que viene del JSON o buscando referencia)
-                    // Es seguro usar el del input porque solo nos importa el ID para la FK
-                    nuevoRelacion.setMaterial(mInput.getMaterial()); 
-                    
-                    // 4. Agregamos a la lista gestionada
+                    // 2. Vincular al Material (TRUCO: Crear instancia limpia solo con ID)
+                    // Esto evita que Hibernate intente actualizar el Material o se confunda
+                    Material materialRef = new Material();
+                    materialRef.setId_material(mInput.getMaterial().getId_material());
+                    nuevoRelacion.setMaterial(materialRef);
+
+                    // 3. Agregar a la lista del padre
                     actualDB.getMaterialesAceptados().add(nuevoRelacion);
                 }
             }
