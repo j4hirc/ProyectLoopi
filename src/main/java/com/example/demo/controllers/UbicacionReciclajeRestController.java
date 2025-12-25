@@ -150,105 +150,65 @@ public class UbicacionReciclajeRestController {
 
  
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> update(
-            @PathVariable Long id,
-            @RequestParam("datos") String datosJson, 
-            @RequestParam(value = "archivo", required = false) MultipartFile archivo
-    ) {
-        UbicacionReciclaje ubicacionDatos;
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestParam("datos") String datosJson, @RequestParam(value = "archivo", required = false) MultipartFile archivo) {
         try {
-            ubicacionDatos = objectMapper.readValue(datosJson, UbicacionReciclaje.class);
+            UbicacionReciclaje datosFrontend = objectMapper.readValue(datosJson, UbicacionReciclaje.class);
+            UbicacionReciclaje actualDB = ubicacionReciclajeService.findById(id);
+            
+            if (actualDB == null) return ResponseEntity.notFound().build();
+
+            // 1. Actualizar Datos Básicos
+            actualDB.setNombre(datosFrontend.getNombre());
+            actualDB.setDireccion(datosFrontend.getDireccion());
+            actualDB.setLatitud(datosFrontend.getLatitud());
+            actualDB.setLongitud(datosFrontend.getLongitud());
+            actualDB.setParroquia(datosFrontend.getParroquia());
+
+            // 2. Actualizar Foto (solo si viene nueva)
+            if (archivo != null && !archivo.isEmpty()) actualDB.setFoto(storageService.subirImagen(archivo));
+
+            // 3. Actualizar Reciclador
+            if (datosFrontend.getReciclador() != null && datosFrontend.getReciclador().getCedula() != null) {
+                actualDB.setReciclador(usuarioService.findById(datosFrontend.getReciclador().getCedula()));
+            } else {
+                actualDB.setReciclador(null);
+            }
+
+            // 4. ACTUALIZAR HORARIOS (Borrar y Reemplazar)
+            if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
+            actualDB.getHorarios().clear(); // Borra viejos
+            if (datosFrontend.getHorarios() != null) {
+                for (HorarioReciclador h : datosFrontend.getHorarios()) {
+                    h.setUbicacion(actualDB); // Vincular
+                    actualDB.getHorarios().add(h);
+                }
+            }
+
+            // 5. ACTUALIZAR MATERIALES (Borrar y Reemplazar)
+            if (actualDB.getMaterialesAceptados() == null) actualDB.setMaterialesAceptados(new ArrayList<>());
+            actualDB.getMaterialesAceptados().clear(); // Borra viejos
+            if (datosFrontend.getMaterialesAceptados() != null) {
+                for (UbicacionMaterial m : datosFrontend.getMaterialesAceptados()) {
+                    if(m.getMaterial() != null && m.getMaterial().getId_material() != null) {
+                        // Crear Referencia Limpia (Truco Anti-Error)
+                        Material matRef = new Material();
+                        matRef.setId_material(m.getMaterial().getId_material());
+                        
+                        UbicacionMaterial nuevoRelacion = new UbicacionMaterial();
+                        nuevoRelacion.setUbicacion(actualDB);
+                        nuevoRelacion.setMaterial(matRef);
+                        
+                        actualDB.getMaterialesAceptados().add(nuevoRelacion);
+                    }
+                }
+            }
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(ubicacionReciclajeService.save(actualDB));
+
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error: " + e.getMessage()));
         }
-        
-        UbicacionReciclaje actualDB = ubicacionReciclajeService.findById(id);
-        if (actualDB == null) {
-            return ResponseEntity.notFound().build();
-        }
-        
-        // 1. FOTO
-        if (archivo != null && !archivo.isEmpty()) {
-            String urlImagen = storageService.subirImagen(archivo);
-            actualDB.setFoto(urlImagen);
-        }
-
-        // 2. DATOS BÁSICOS
-        actualDB.setNombre(ubicacionDatos.getNombre());
-        actualDB.setDireccion(ubicacionDatos.getDireccion());
-        actualDB.setLatitud(ubicacionDatos.getLatitud());
-        actualDB.setLongitud(ubicacionDatos.getLongitud());
-
-        if (ubicacionDatos.getParroquia() != null) actualDB.setParroquia(ubicacionDatos.getParroquia());
-
-        // 3. RECICLADOR
-        if (ubicacionDatos.getReciclador() != null && ubicacionDatos.getReciclador().getCedula() != null) {
-            Usuario r = usuarioService.findById(ubicacionDatos.getReciclador().getCedula());
-            actualDB.setReciclador(r);
-        } else {
-            actualDB.setReciclador(null);
-        }
-
-        // 4. HORARIOS
-        if (ubicacionDatos.getHorarios() != null) {
-            if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
-            
-            FormularioReciclador formularioOriginal = null;
-            if (!actualDB.getHorarios().isEmpty()) {
-                for(HorarioReciclador h : actualDB.getHorarios()) {
-                    if (h.getFormulario() != null) { formularioOriginal = h.getFormulario(); break; }
-                }
-            }
-            
-            actualDB.getHorarios().clear();
-            for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
-                h.setUbicacion(actualDB);
-                if (formularioOriginal != null) h.setFormulario(formularioOriginal);
-                actualDB.getHorarios().add(h);
-            }
-        }
-
-        // 5. MATERIALES (AQUÍ ESTÁ LA MAGIA 🪄)
-        if (ubicacionDatos.getMaterialesAceptados() != null) {
-            System.out.println("DEBUG: Recibidos " + ubicacionDatos.getMaterialesAceptados().size() + " materiales para actualizar.");
-
-            // A. Asegurarnos que la lista de BD no sea null
-            if (actualDB.getMaterialesAceptados() == null) {
-                actualDB.setMaterialesAceptados(new ArrayList<>());
-            }
-            
-            // B. Preparar la LISTA TEMPORAL con los nuevos datos "limpios"
-            List<UbicacionMaterial> nuevosParaGuardar = new ArrayList<>();
-
-            for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // Validación estricta: Si viene null, lo ignoramos
-                if (mInput.getMaterial() == null || mInput.getMaterial().getId_material() == null) {
-                    System.out.println("DEBUG: Material nulo o sin ID ignorado.");
-                    continue; 
-                }
-
-                // Crear referencia limpia para que Hibernate no se confunda con datos viejos
-                Material materialRef = new Material();
-                materialRef.setId_material(mInput.getMaterial().getId_material());
-
-                UbicacionMaterial mNuevo = new UbicacionMaterial();
-                mNuevo.setUbicacion(actualDB); // IMPORTANTE: Vincular al Padre
-                mNuevo.setMaterial(materialRef); // IMPORTANTE: Vincular al ID del Material
-                
-                nuevosParaGuardar.add(mNuevo);
-            }
-
-            // C. Operación Atómica: Borrar Todo y Agregar Todo de golpe
-            // Esto es más seguro que borrar y agregar en el mismo bucle
-            actualDB.getMaterialesAceptados().clear();
-            actualDB.getMaterialesAceptados().addAll(nuevosParaGuardar);
-            
-            System.out.println("DEBUG: Se actualizaron " + nuevosParaGuardar.size() + " materiales en la lista.");
-        }
-
-        UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
-        return ResponseEntity.status(HttpStatus.CREATED).body(actualizado);
     }
 
     @DeleteMapping("/ubicacion_reciclajes/{id}")
