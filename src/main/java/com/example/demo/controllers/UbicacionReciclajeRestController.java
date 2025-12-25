@@ -18,6 +18,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import com.example.demo.models.entity.FormularioReciclador; // <--- IMPORTANTE: Agregado
 import com.example.demo.models.entity.HorarioReciclador;
+import com.example.demo.models.entity.Material;
 import com.example.demo.models.entity.Notificacion;
 import com.example.demo.models.entity.UbicacionMaterial;
 import com.example.demo.models.entity.UbicacionReciclaje;
@@ -151,7 +152,7 @@ public class UbicacionReciclajeRestController {
     // ACTUALIZAR (CON PRESERVACIÓN DE FORMULARIO)
     // ======================================================================
  // ======================================================================
-    @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
             @PathVariable Long id,
             @RequestParam("datos") String datosJson, 
@@ -182,9 +183,7 @@ public class UbicacionReciclajeRestController {
         actualDB.setLatitud(ubicacionDatos.getLatitud());
         actualDB.setLongitud(ubicacionDatos.getLongitud());
 
-        if (ubicacionDatos.getParroquia() != null) {
-            actualDB.setParroquia(ubicacionDatos.getParroquia());
-        }
+        if (ubicacionDatos.getParroquia() != null) actualDB.setParroquia(ubicacionDatos.getParroquia());
 
         // 3. RECICLADOR
         if (ubicacionDatos.getReciclador() != null && ubicacionDatos.getReciclador().getCedula() != null) {
@@ -194,67 +193,55 @@ public class UbicacionReciclajeRestController {
             actualDB.setReciclador(null);
         }
 
-        // 4. ACTUALIZAR HORARIOS
+        // 4. HORARIOS
         if (ubicacionDatos.getHorarios() != null) {
             if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
-
+            
             // Rescatar formulario
             FormularioReciclador formularioOriginal = null;
             if (!actualDB.getHorarios().isEmpty()) {
-                for(HorarioReciclador hViejo : actualDB.getHorarios()) {
-                    if (hViejo.getFormulario() != null) {
-                        formularioOriginal = hViejo.getFormulario();
-                        break;
-                    }
+                for(HorarioReciclador h : actualDB.getHorarios()) {
+                    if (h.getFormulario() != null) { formularioOriginal = h.getFormulario(); break; }
                 }
             }
-
-            actualDB.getHorarios().clear(); 
             
+            actualDB.getHorarios().clear();
             for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
-                h.setUbicacion(actualDB); 
+                h.setUbicacion(actualDB);
                 if (formularioOriginal != null) h.setFormulario(formularioOriginal);
                 actualDB.getHorarios().add(h);
             }
         }
 
-        // 5. ACTUALIZAR MATERIALES (CON DEBUGGING DETALLADO)
+        // 5. MATERIALES (LÓGICA BLINDADA)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            System.out.println(">>> INICIO ACTUALIZACIÓN MATERIALES <<<");
-            System.out.println("Cantidad enviada desde Frontend: " + ubicacionDatos.getMaterialesAceptados().size());
-
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
+            
+            // Borrar anteriores
             actualDB.getMaterialesAceptados().clear();
 
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                
-                // DEPURACIÓN: Verificar si llega el material y su ID
-                if (mInput.getMaterial() == null) {
-                    System.out.println("ERROR FATAL: El objeto 'material' llegó NULO.");
-                    continue;
+                // Validación de seguridad
+                if (mInput.getMaterial() == null || mInput.getMaterial().getId_material() == null) {
+                    continue; // Saltamos si viene vacío
                 }
-                
-                System.out.println("Material recibido: " + mInput.getMaterial());
-                System.out.println("ID Material: " + mInput.getMaterial().getId_material()); 
 
-                // Si el ID es nulo, Java no sabrá qué guardar.
-                if (mInput.getMaterial().getId_material() == null) {
-                    System.out.println("¡ALERTA! El ID del material es NULL. Revisa el nombre del campo en el JS.");
-                }
+                // AQUI ESTA EL TRUCO: Creamos una referencia "Limpia"
+                // No usamos el objeto mInput directo para evitar conflictos de Hibernate
+                Material materialRef = new Material();
+                materialRef.setId_material(mInput.getMaterial().getId_material());
 
                 UbicacionMaterial mNuevo = new UbicacionMaterial();
-                mNuevo.setUbicacion(actualDB);
-                mNuevo.setMaterial(mInput.getMaterial()); 
+                mNuevo.setUbicacion(actualDB); // Vinculamos al Padre
+                mNuevo.setMaterial(materialRef); // Vinculamos el ID del Material
                 
                 actualDB.getMaterialesAceptados().add(mNuevo);
             }
-            System.out.println(">>> FIN ACTUALIZACIÓN MATERIALES <<<");
         }
 
         UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
-        
         return ResponseEntity.status(HttpStatus.CREATED).body(actualizado);
     }
 

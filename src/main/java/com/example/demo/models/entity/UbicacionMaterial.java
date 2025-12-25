@@ -23,10 +23,10 @@ public class UbicacionMaterial implements Serializable {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_ubicacion_reciclaje")
-   @JsonIgnoreProperties("materialesAceptados")
+    @JsonIgnoreProperties({"materialesAceptados", "horarios", "hibernateLazyInitializer", "handler"})
     private UbicacionReciclaje ubicacion;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER) 
     @JoinColumn(name = "id_material")
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Material material;
