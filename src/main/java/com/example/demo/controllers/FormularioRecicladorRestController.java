@@ -126,73 +126,90 @@ public class FormularioRecicladorRestController {
     // =================================================================
     // UPDATE: AQUÍ SE CREA LA UBICACIÓN Y SE PASAN LOS MATERIALES
     // =================================================================
-    @PutMapping("/formularios_reciclador/{id}")
+    @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
-            @RequestBody FormularioReciclador formularioReciclador,
-            @PathVariable Long id) {
-
-       FormularioReciclador formularioActual = formularioRecicladorService.findById(id);
-
-        if (formularioActual == null)
+            @PathVariable Long id,
+            @RequestParam("datos") String datosJson, 
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo
+    ) {
+        UbicacionReciclaje ubicacionDatos;
+        try {
+            ubicacionDatos = objectMapper.readValue(datosJson, UbicacionReciclaje.class);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
+        }
+        
+        UbicacionReciclaje actualDB = ubicacionReciclajeService.findById(id);
+        if (actualDB == null) {
             return ResponseEntity.notFound().build();
-
-        Boolean aprobadoAntes = formularioActual.getAprobado();
-
-        // Actualizar datos básicos
-        formularioActual.setAnios_experiencia(formularioReciclador.getAnios_experiencia());
-        formularioActual.setNombre_sitio(formularioReciclador.getNombre_sitio());
-        formularioActual.setLatitud(formularioReciclador.getLatitud());
-        formularioActual.setLongitud(formularioReciclador.getLongitud());
-        formularioActual.setUbicacion(formularioReciclador.getUbicacion());
-        
-        if(formularioReciclador.getFoto_perfil_profesional() != null)
-             formularioActual.setFoto_perfil_profesional(formularioReciclador.getFoto_perfil_profesional());
-        if(formularioReciclador.getEvidencia_experiencia() != null)
-             formularioActual.setEvidencia_experiencia(formularioReciclador.getEvidencia_experiencia());
-             
-        formularioActual.setAprobado(formularioReciclador.getAprobado());
-        formularioActual.setObservacion_admin(formularioReciclador.getObservacion_admin());
-
-        // Actualizar Horarios
-        if (formularioReciclador.getHorarios() != null) {
-            formularioActual.getHorarios().clear();
-            for (HorarioReciclador h : formularioReciclador.getHorarios()) {
-                h.setFormulario(formularioActual);
-            }
-            formularioActual.getHorarios().addAll(formularioReciclador.getHorarios());
         }
         
-        // Actualizar Materiales del Formulario
-        if (formularioReciclador.getMateriales() != null) {
-            formularioActual.getMateriales().clear();
-            for (FormularioRecicladorMaterial m : formularioReciclador.getMateriales()) {
-                m.setFormulario(formularioActual);
+        if (archivo != null && !archivo.isEmpty()) {
+            String urlImagen = storageService.subirImagen(archivo);
+            actualDB.setFoto(urlImagen);
+        }
+
+        actualDB.setNombre(ubicacionDatos.getNombre());
+        actualDB.setDireccion(ubicacionDatos.getDireccion());
+        actualDB.setLatitud(ubicacionDatos.getLatitud());
+        actualDB.setLongitud(ubicacionDatos.getLongitud());
+
+        if (ubicacionDatos.getParroquia() != null) {
+            actualDB.setParroquia(ubicacionDatos.getParroquia());
+        }
+
+        if (ubicacionDatos.getReciclador() != null && ubicacionDatos.getReciclador().getCedula() != null) {
+            Usuario r = usuarioService.findById(ubicacionDatos.getReciclador().getCedula());
+            actualDB.setReciclador(r);
+        } else {
+            actualDB.setReciclador(null);
+        }
+
+        // 4. ACTUALIZAR HORARIOS (PRESERVANDO ID_FORMULARIO)
+        if (ubicacionDatos.getHorarios() != null) {
+            
+            // A. Intentamos rescatar el formulario original de los horarios viejos
+            FormularioReciclador formularioOriginal = null;
+            if (actualDB.getHorarios() != null && !actualDB.getHorarios().isEmpty()) {
+                // Tomamos el formulario del primer horario que encontremos (asumiendo que todos vienen del mismo)
+                for(HorarioReciclador hViejo : actualDB.getHorarios()) {
+                    if(hViejo.getFormulario() != null) {
+                        formularioOriginal = hViejo.getFormulario();
+                        break; 
+                    }
+                }
             }
-            formularioActual.getMateriales().addAll(formularioReciclador.getMateriales());
+
+            // B. Limpiamos la lista (esto borra los registros viejos)
+            actualDB.getHorarios().clear(); 
+            
+            // C. Agregamos los nuevos, inyectándoles el formulario rescatado
+            for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
+                h.setUbicacion(actualDB); // Vincular Ubicación (Padre principal)
+                
+                // Si existía un formulario original, lo volvemos a vincular
+                if (formularioOriginal != null) {
+                    h.setFormulario(formularioOriginal);
+                }
+                
+                actualDB.getHorarios().add(h);
+            }
         }
 
-        FormularioReciclador actualizado = formularioRecicladorService.save(formularioActual);
-
-        // --- LÓGICA DE APROBACIÓN ---
-        if (aprobadoAntes == null && Boolean.TRUE.equals(actualizado.getAprobado())) {
-
-            // A. Notificación
-            crearNotificacionAprobacion(actualizado);
-
-            // B. Asignar Rol Reciclador
-            asignarRolReciclador(actualizado.getUsuario());
-
-            // C. CREAR UBICACIÓN Y PASAR MATERIALES (¡ESTO ES LO NUEVO!)
-            crearUbicacionDesdeFormulario(actualizado);
-        } 
-        else if (aprobadoAntes == null && Boolean.FALSE.equals(actualizado.getAprobado())) {
-             // Notificación de rechazo
-             crearNotificacionRechazo(actualizado);
+        // 5. ACTUALIZAR MATERIALES
+        if (ubicacionDatos.getMaterialesAceptados() != null) {
+            actualDB.getMaterialesAceptados().clear(); 
+            for (UbicacionMaterial m : ubicacionDatos.getMaterialesAceptados()) {
+                m.setUbicacion(actualDB); 
+                actualDB.getMaterialesAceptados().add(m);
+            }
         }
 
-        return ResponseEntity.ok(actualizado);
+        UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
+        
+        return ResponseEntity.status(HttpStatus.CREATED).body(actualizado);
     }
-
     // --- MÉTODOS AUXILIARES PARA ORDENAR EL CÓDIGO ---
 
     private void crearUbicacionDesdeFormulario(FormularioReciclador form) {
