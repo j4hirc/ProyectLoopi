@@ -194,7 +194,6 @@ public class UbicacionReciclajeRestController {
         if (ubicacionDatos.getHorarios() != null) {
             if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
             
-            // Rescatar formulario
             FormularioReciclador formularioOriginal = null;
             if (!actualDB.getHorarios().isEmpty()) {
                 for(HorarioReciclador h : actualDB.getHorarios()) {
@@ -210,37 +209,42 @@ public class UbicacionReciclajeRestController {
             }
         }
 
-        // 5. MATERIALES (ESTA ES LA LÓGICA CORREGIDA)
+        // 5. MATERIALES (AQUÍ ESTÁ LA MAGIA 🪄)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
-            
-            // A. Asegurar que la lista existe en BD
+            System.out.println("DEBUG: Recibidos " + ubicacionDatos.getMaterialesAceptados().size() + " materiales para actualizar.");
+
+            // A. Asegurarnos que la lista de BD no sea null
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
             
-            // B. Crear una lista TEMPORAL con los nuevos (para no confundir a Hibernate)
+            // B. Preparar la LISTA TEMPORAL con los nuevos datos "limpios"
             List<UbicacionMaterial> nuevosParaGuardar = new ArrayList<>();
 
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // Validación estricta
+                // Validación estricta: Si viene null, lo ignoramos
                 if (mInput.getMaterial() == null || mInput.getMaterial().getId_material() == null) {
+                    System.out.println("DEBUG: Material nulo o sin ID ignorado.");
                     continue; 
                 }
 
-                // Crear referencia limpia
+                // Crear referencia limpia para que Hibernate no se confunda con datos viejos
                 Material materialRef = new Material();
                 materialRef.setId_material(mInput.getMaterial().getId_material());
 
                 UbicacionMaterial mNuevo = new UbicacionMaterial();
-                mNuevo.setUbicacion(actualDB); // Vinculamos al Padre
-                mNuevo.setMaterial(materialRef); // Vinculamos el ID del Material
+                mNuevo.setUbicacion(actualDB); // IMPORTANTE: Vincular al Padre
+                mNuevo.setMaterial(materialRef); // IMPORTANTE: Vincular al ID del Material
                 
                 nuevosParaGuardar.add(mNuevo);
             }
 
-            // C. Operación Atómica: Borrar Todo y Agregar Todo
+            // C. Operación Atómica: Borrar Todo y Agregar Todo de golpe
+            // Esto es más seguro que borrar y agregar en el mismo bucle
             actualDB.getMaterialesAceptados().clear();
             actualDB.getMaterialesAceptados().addAll(nuevosParaGuardar);
+            
+            System.out.println("DEBUG: Se actualizaron " + nuevosParaGuardar.size() + " materiales en la lista.");
         }
 
         UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
