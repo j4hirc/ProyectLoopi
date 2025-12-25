@@ -150,6 +150,7 @@ public class UbicacionReciclajeRestController {
     // ======================================================================
     // ACTUALIZAR (CON PRESERVACIÓN DE FORMULARIO)
     // ======================================================================
+ // ======================================================================
     @PutMapping(value = "/ubicacion_reciclajes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> update(
             @PathVariable Long id,
@@ -193,59 +194,63 @@ public class UbicacionReciclajeRestController {
             actualDB.setReciclador(null);
         }
 
-        // 4. ACTUALIZAR HORARIOS (PRESERVANDO EL FORMULARIO ORIGINAL)
+        // 4. ACTUALIZAR HORARIOS
         if (ubicacionDatos.getHorarios() != null) {
-            // Protección contra null en la lista original
-            if (actualDB.getHorarios() == null) {
-                actualDB.setHorarios(new ArrayList<>());
-            }
+            if (actualDB.getHorarios() == null) actualDB.setHorarios(new ArrayList<>());
 
-            // --- A. RESCATAR EL FORMULARIO ANTES DE BORRAR ---
+            // Rescatar formulario
             FormularioReciclador formularioOriginal = null;
             if (!actualDB.getHorarios().isEmpty()) {
                 for(HorarioReciclador hViejo : actualDB.getHorarios()) {
                     if (hViejo.getFormulario() != null) {
                         formularioOriginal = hViejo.getFormulario();
-                        break; // Con encontrar uno basta
+                        break;
                     }
                 }
             }
-            // -------------------------------------------------
 
-            // B. BORRAR (Ahora sí es seguro borrar)
             actualDB.getHorarios().clear(); 
             
             for (HorarioReciclador h : ubicacionDatos.getHorarios()) {
                 h.setUbicacion(actualDB); 
-                
-                // Si rescatamos un formulario, se lo asignamos al horario nuevo
-                if (formularioOriginal != null) {
-                    h.setFormulario(formularioOriginal);
-                }
-
+                if (formularioOriginal != null) h.setFormulario(formularioOriginal);
                 actualDB.getHorarios().add(h);
             }
         }
 
-  
+        // 5. ACTUALIZAR MATERIALES (CON DEBUGGING DETALLADO)
         if (ubicacionDatos.getMaterialesAceptados() != null) {
+            System.out.println(">>> INICIO ACTUALIZACIÓN MATERIALES <<<");
+            System.out.println("Cantidad enviada desde Frontend: " + ubicacionDatos.getMaterialesAceptados().size());
+
             if (actualDB.getMaterialesAceptados() == null) {
                 actualDB.setMaterialesAceptados(new ArrayList<>());
             }
-
-            // Borrar antiguos (orphanRemoval = true elimina en BD)
             actualDB.getMaterialesAceptados().clear();
 
-            // Agregar nuevos limpios
             for (UbicacionMaterial mInput : ubicacionDatos.getMaterialesAceptados()) {
-                // Instancia nueva para evitar conflictos de detached entities
-                UbicacionMaterial mNuevo = new UbicacionMaterial();
                 
+                // DEPURACIÓN: Verificar si llega el material y su ID
+                if (mInput.getMaterial() == null) {
+                    System.out.println("ERROR FATAL: El objeto 'material' llegó NULO.");
+                    continue;
+                }
+                
+                System.out.println("Material recibido: " + mInput.getMaterial());
+                System.out.println("ID Material: " + mInput.getMaterial().getId_material()); 
+
+                // Si el ID es nulo, Java no sabrá qué guardar.
+                if (mInput.getMaterial().getId_material() == null) {
+                    System.out.println("¡ALERTA! El ID del material es NULL. Revisa el nombre del campo en el JS.");
+                }
+
+                UbicacionMaterial mNuevo = new UbicacionMaterial();
                 mNuevo.setUbicacion(actualDB);
                 mNuevo.setMaterial(mInput.getMaterial()); 
                 
                 actualDB.getMaterialesAceptados().add(mNuevo);
             }
+            System.out.println(">>> FIN ACTUALIZACIÓN MATERIALES <<<");
         }
 
         UbicacionReciclaje actualizado = ubicacionReciclajeService.save(actualDB);
