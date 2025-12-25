@@ -1,7 +1,9 @@
 package com.example.demo.controllers;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map; // Necesario para respuestas de error JSON
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -11,9 +13,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile; // Necesario para el archivo
 
 import com.fasterxml.jackson.databind.ObjectMapper; // Necesario para convertir String a Objeto
-
+import com.example.demo.models.entity.Notificacion;
 import com.example.demo.models.entity.UbicacionReciclaje;
 import com.example.demo.models.entity.Usuario;
+import com.example.demo.models.service.INotificacionService;
 import com.example.demo.models.service.IUbicacionReciclajeService;
 import com.example.demo.models.service.IUsuarioService;
 import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de fotos
@@ -32,6 +35,9 @@ public class UbicacionReciclajeRestController {
     // 1. INYECCIÓN PARA FOTOS Y JSON
     @Autowired
     private SupabaseStorageService storageService;
+    
+    @Autowired
+    private INotificacionService notificacionService;
     
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -83,7 +89,45 @@ public class UbicacionReciclajeRestController {
         }
 
         UbicacionReciclaje nuevo = ubicacionReciclajeService.save(ubicacionReciclaje);
+        
+        notificarUsuariosNormales(nuevo);
+        
         return ResponseEntity.status(HttpStatus.CREATED).body(nuevo);
+    }
+	
+	private void notificarUsuariosNormales(UbicacionReciclaje nuevoPunto) {
+        List<Usuario> todos = usuarioService.findAll();
+
+        List<Usuario> usuariosNormales = todos.stream()
+            .filter(u -> u.getRoles() != null && u.getRoles().stream()
+                .anyMatch(usuarioRol -> 
+                    usuarioRol.getRol() != null && 
+                    usuarioRol.getRol().getId_rol() == 1L 
+                )) 
+            .collect(Collectors.toList());
+
+        String titulo = "Nuevo Punto de Reciclaje ♻️";
+        String mensaje = "Se ha habilitado: " + nuevoPunto.getNombre() + ". ¡Míralo en el mapa!";
+
+        for (Usuario u : usuariosNormales) {
+            Notificacion noti = new Notificacion();
+            noti.setUsuario(u);
+            noti.setTitulo(titulo);
+            noti.setMensaje(mensaje);
+            noti.setFecha_creacion(LocalDateTime.now());
+            noti.setLeido(false);
+            noti.setTipo("SISTEMA");
+            noti.setEntidad_referencia("UBICACION");
+            
+            Long idRef = (nuevoPunto.getId_ubicacion_reciclaje() != null) 
+                         ? nuevoPunto.getId_ubicacion_reciclaje() 
+                         : nuevoPunto.getId_ubicacion_reciclaje(); // Ajusta según tu entidad UbicacionReciclaje
+            noti.setId_referencia(idRef);
+
+            notificacionService.save(noti);
+        }
+        
+        System.out.println("Se notificó a " + usuariosNormales.size() + " usuarios normales.");
     }
 
     // ======================================================================
