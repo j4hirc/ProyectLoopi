@@ -1,11 +1,16 @@
 package com.example.demo.controllers;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -13,16 +18,21 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile; // IMPORTANTE PARA ARCHIVOS
+import org.springframework.web.multipart.MultipartFile; 
 
-// IMPORTANTE PARA CONVERTIR TEXTO A JSON
 import com.fasterxml.jackson.databind.ObjectMapper; 
 
 import com.example.demo.models.entity.Usuario;
 import com.example.demo.models.DAO.IRolDao;
 import com.example.demo.models.DAO.IUsuarioRolDao;
+import com.example.demo.models.entity.Favorito;
+import com.example.demo.models.entity.HorarioReciclador;
+import com.example.demo.models.entity.Notificacion;
 import com.example.demo.models.entity.Rol;
+import com.example.demo.models.entity.UbicacionReciclaje;
 import com.example.demo.models.entity.UsuarioRol;
+import com.example.demo.models.service.IFavoritoService;
+import com.example.demo.models.service.INotificacionService;
 import com.example.demo.models.service.IUsuarioService;
 import com.example.demo.models.service.SupabaseStorageService; // TU SERVICIO DE NUBE
 
@@ -50,7 +60,13 @@ public class UsuarioRestController {
 	private IUsuarioRolDao usuarioRolDao;
 	
 	@Autowired
+    private IFavoritoService favoritoService;
+	
+	@Autowired
     private JavaMailSender mailSender;
+	
+	@Autowired
+    private INotificacionService notificacionService;
 	
 	@Autowired
     private SupabaseStorageService storageService;
@@ -326,6 +342,8 @@ public class UsuarioRestController {
 		if (!coincide) {
 			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("mensaje", "Credenciales incorrectas"));
 		}
+		
+		verificarFavoritosDisponibles(usuarioDb);
 
 		return ResponseEntity.ok(usuarioDb);
 	}
@@ -365,6 +383,7 @@ public class UsuarioRestController {
 
         return ResponseEntity.ok(Map.of("mensaje", "Se ha enviado un código a tu correo."));
     }
+	
 
     @PostMapping("/recuperar-password/validar") 
     public ResponseEntity<?> cambiarPassword(@RequestBody Map<String, String> body) {
@@ -384,6 +403,90 @@ public class UsuarioRestController {
 
         return ResponseEntity.ok(Map.of("mensaje", "Contraseña actualizada correctamente."));
     }
+    
+    
+    
+
+    private void verificarFavoritosDisponibles(Usuario usuario) {
+        try {
+            LocalTime horaActual = LocalTime.now();
+            
+            DayOfWeek diaSemanaEnum = LocalDate.now().getDayOfWeek();
+            String diaActualIngles = diaSemanaEnum.getDisplayName(TextStyle.FULL, Locale.ENGLISH).toUpperCase();
+            
+            String diaActualBD = switch(diaActualIngles) {
+                case "MONDAY" -> "Lunes";
+                case "TUESDAY" -> "Martes";
+                case "WEDNESDAY" -> "Miércoles"; 
+                case "THURSDAY" -> "Jueves";
+                case "FRIDAY" -> "Viernes";
+                case "SATURDAY" -> "Sábado";
+                case "SUNDAY" -> "Domingo";
+                default -> "";
+            };
+
+            List<Favorito> misFavoritos = favoritoService.findByUsuario(usuario.getCedula());
+
+            if (misFavoritos != null && !misFavoritos.isEmpty()) {
+                
+                for (Favorito fav : misFavoritos) {
+                    UbicacionReciclaje punto = fav.getUbicacion(); 
+                    
+                    if (punto != null && punto.getHorarios() != null) {
+                        for (HorarioReciclador horario : punto.getHorarios()) {
+                            
+
+                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) {
+                                continue; 
+                            }
+
+
+                            String diaBD = horario.getDia_semana();
+                            
+                            if (limpiarTexto(diaBD).equals(limpiarTexto(diaActualBD))) {
+                                
+
+                                LocalTime abre = horario.getHora_inicio();
+                                LocalTime cierra = horario.getHora_fin();
+                                
+                                if (horaActual.isAfter(abre) && horaActual.isBefore(cierra)) {
+                                    
+                                    Notificacion noti = new Notificacion();
+                                    noti.setUsuario(usuario);
+                                    noti.setTitulo("¡" + punto.getNombre() + " está abierto!");
+                                    noti.setMensaje("Puedes reciclar ahora. Cierran a las " + cierra + ".");
+                                    noti.setFecha_creacion(java.time.LocalDateTime.now());
+                                    noti.setLeido(false);
+                                    noti.setTipo("DISPONIBILIDAD"); 
+                                    noti.setEntidad_referencia("UBICACION");
+                                    noti.setId_referencia(punto.getId_ubicacion_reciclaje()); 
+                                    
+                                    notificacionService.save(noti);
+                                    
+                                    break; 
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Error verificando favoritos: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    // Ayuda a comparar "Miercoles" con "Miércoles" o "MIERCOLES"
+    private String limpiarTexto(String texto) {
+        if (texto == null) return "";
+        return texto.toLowerCase()
+                .replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+                .trim();
+    }
+    
+    
+    
+    
     
     @GetMapping("/healthz")
     public String healthCheck() {
