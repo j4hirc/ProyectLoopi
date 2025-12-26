@@ -435,17 +435,17 @@ public class UsuarioRestController {
                     if (punto != null && punto.getHorarios() != null) {
                         for (HorarioReciclador horario : punto.getHorarios()) {
                             
-
+                            // CORREGIDO: Usamos tus nombres exactos (con guion bajo)
                             if (horario.getHora_inicio() == null || horario.getHora_fin() == null) {
                                 continue; 
                             }
-
 
                             String diaBD = horario.getDia_semana();
                             
                             if (limpiarTexto(diaBD).equals(limpiarTexto(diaActualBD))) {
                                 
-
+                                // ¡AQUÍ ESTÁ LA MAGIA!
+                                // Directo a LocalTime, sin Strings ni parseos raros.
                                 LocalTime abre = horario.getHora_inicio();
                                 LocalTime cierra = horario.getHora_fin();
                                 
