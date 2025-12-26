@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile; 
 
@@ -407,10 +408,10 @@ public class UsuarioRestController {
     
     
 
+    @Transactional // <--- ESTO ASEGURA QUE SE GUARDE EN LA BASE
     private void verificarFavoritosDisponibles(Usuario usuario) {
         try {
             LocalTime horaActual = LocalTime.now();
-            
             DayOfWeek diaSemanaEnum = LocalDate.now().getDayOfWeek();
             String diaActualIngles = diaSemanaEnum.getDisplayName(TextStyle.FULL, Locale.ENGLISH).toUpperCase();
             
@@ -428,28 +429,21 @@ public class UsuarioRestController {
             List<Favorito> misFavoritos = favoritoService.findByUsuario(usuario.getCedula());
 
             if (misFavoritos != null && !misFavoritos.isEmpty()) {
-                
                 for (Favorito fav : misFavoritos) {
                     UbicacionReciclaje punto = fav.getUbicacion(); 
-                    
                     if (punto != null && punto.getHorarios() != null) {
                         for (HorarioReciclador horario : punto.getHorarios()) {
-                            
-                            // CORREGIDO: Usamos tus nombres exactos (con guion bajo)
-                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) {
-                                continue; 
-                            }
+                            // Usamos getHora_inicio() tal cual está en tu entidad
+                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) continue; 
 
                             String diaBD = horario.getDia_semana();
                             
                             if (limpiarTexto(diaBD).equals(limpiarTexto(diaActualBD))) {
-                                
-                                // ¡AQUÍ ESTÁ LA MAGIA!
-                                // Directo a LocalTime, sin Strings ni parseos raros.
                                 LocalTime abre = horario.getHora_inicio();
                                 LocalTime cierra = horario.getHora_fin();
                                 
                                 if (horaActual.isAfter(abre) && horaActual.isBefore(cierra)) {
+                                    System.out.println(">>> ¡PUNTO ABIERTO ENCONTRADO! Creando notificación para: " + usuario.getCedula());
                                     
                                     Notificacion noti = new Notificacion();
                                     noti.setUsuario(usuario);
@@ -461,7 +455,8 @@ public class UsuarioRestController {
                                     noti.setEntidad_referencia("UBICACION");
                                     noti.setId_referencia(punto.getId_ubicacion_reciclaje()); 
                                     
-                                    notificacionService.save(noti);
+                                    Notificacion guardada = notificacionService.save(noti);
+                                    System.out.println(">>> Notificación guardada ID: " + (guardada != null ? guardada.getId_notificacion() : "NULL"));
                                     
                                     break; 
                                 }
@@ -471,7 +466,7 @@ public class UsuarioRestController {
                 }
             }
         } catch (Exception e) {
-            System.out.println("Error verificando favoritos: " + e.getMessage());
+            System.err.println("Error verificando favoritos: " + e.getMessage());
             e.printStackTrace();
         }
     }
