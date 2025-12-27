@@ -408,10 +408,11 @@ public class UsuarioRestController {
     
     
 
-    @Transactional // <--- ESTO ASEGURA QUE SE GUARDE EN LA BASE
-    private void verificarFavoritosDisponibles(Usuario usuario) {
+    @Transactional 
+    public void verificarFavoritosDisponibles(Usuario usuario) {
         try {
             LocalTime horaActual = LocalTime.now();
+            
             DayOfWeek diaSemanaEnum = LocalDate.now().getDayOfWeek();
             String diaActualIngles = diaSemanaEnum.getDisplayName(TextStyle.FULL, Locale.ENGLISH).toUpperCase();
             
@@ -429,22 +430,31 @@ public class UsuarioRestController {
             List<Favorito> misFavoritos = favoritoService.findByUsuario(usuario.getCedula());
 
             if (misFavoritos != null && !misFavoritos.isEmpty()) {
+                
                 for (Favorito fav : misFavoritos) {
                     UbicacionReciclaje punto = fav.getUbicacion(); 
+                    
                     if (punto != null && punto.getHorarios() != null) {
                         for (HorarioReciclador horario : punto.getHorarios()) {
-                            // Usamos getHora_inicio() tal cual está en tu entidad
-                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) continue; 
+                            
+                            // Usamos los nombres exactos de tu Entidad (con guion bajo)
+                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) {
+                                continue; 
+                            }
 
                             String diaBD = horario.getDia_semana();
                             
+                            // Normalizamos texto
                             if (limpiarTexto(diaBD).equals(limpiarTexto(diaActualBD))) {
+                                
+                                // Como ya son LocalTime, comparamos directo
                                 LocalTime abre = horario.getHora_inicio();
                                 LocalTime cierra = horario.getHora_fin();
                                 
                                 if (horaActual.isAfter(abre) && horaActual.isBefore(cierra)) {
-                                    System.out.println(">>> ¡PUNTO ABIERTO ENCONTRADO! Creando notificación para: " + usuario.getCedula());
                                     
+                                    System.out.println(">>> ¡Punto abierto encontrado! " + punto.getNombre());
+
                                     Notificacion noti = new Notificacion();
                                     noti.setUsuario(usuario);
                                     noti.setTitulo("¡" + punto.getNombre() + " está abierto!");
@@ -455,10 +465,12 @@ public class UsuarioRestController {
                                     noti.setEntidad_referencia("UBICACION");
                                     noti.setId_referencia(punto.getId_ubicacion_reciclaje()); 
                                     
+                                    // Guardamos y forzamos commit
                                     Notificacion guardada = notificacionService.save(noti);
-                                    System.out.println(">>> Notificación guardada ID: " + (guardada != null ? guardada.getId_notificacion() : "NULL"));
                                     
-                                    break; 
+                                    System.out.println(">>> Notificación guardada con ID: " + guardada.getId_notificacion());
+                                    
+                                    break; // Notificamos este punto y pasamos al siguiente
                                 }
                             }
                         }
@@ -471,7 +483,6 @@ public class UsuarioRestController {
         }
     }
 
-    // Ayuda a comparar "Miercoles" con "Miércoles" o "MIERCOLES"
     private String limpiarTexto(String texto) {
         if (texto == null) return "";
         return texto.toLowerCase()
