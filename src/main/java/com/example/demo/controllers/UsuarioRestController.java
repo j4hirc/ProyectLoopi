@@ -2,6 +2,7 @@ package com.example.demo.controllers;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
@@ -408,12 +409,13 @@ public class UsuarioRestController {
     
     
 
-    @Transactional 
+    @Transactional
     public void verificarFavoritosDisponibles(Usuario usuario) {
         try {
-            LocalTime horaActual = LocalTime.now();
+            ZoneId zonaEcuador = ZoneId.of("America/Guayaquil");
+            LocalTime horaActual = LocalTime.now(zonaEcuador);
+            DayOfWeek diaSemanaEnum = LocalDate.now(zonaEcuador).getDayOfWeek();
             
-            DayOfWeek diaSemanaEnum = LocalDate.now().getDayOfWeek();
             String diaActualIngles = diaSemanaEnum.getDisplayName(TextStyle.FULL, Locale.ENGLISH).toUpperCase();
             
             String diaActualBD = switch(diaActualIngles) {
@@ -427,50 +429,52 @@ public class UsuarioRestController {
                 default -> "";
             };
 
+            System.out.println(">>> HORA ECUADOR: " + horaActual + " | DÍA: " + diaActualBD);
+
             List<Favorito> misFavoritos = favoritoService.findByUsuario(usuario.getCedula());
 
-            if (misFavoritos != null && !misFavoritos.isEmpty()) {
-                
+            if (misFavoritos != null) {
                 for (Favorito fav : misFavoritos) {
                     UbicacionReciclaje punto = fav.getUbicacion(); 
                     
                     if (punto != null && punto.getHorarios() != null) {
                         for (HorarioReciclador horario : punto.getHorarios()) {
                             
-                            // Usamos los nombres exactos de tu Entidad (con guion bajo)
-                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) {
-                                continue; 
-                            }
+                            if (horario.getHora_inicio() == null || horario.getHora_fin() == null) continue; 
 
                             String diaBD = horario.getDia_semana();
                             
-                            // Normalizamos texto
+                            // Debug interno
+                            // System.out.println("   Revisando: " + punto.getNombre() + " (" + diaBD + " " + horario.getHora_inicio() + " - " + horario.getHora_fin() + ")");
+
                             if (limpiarTexto(diaBD).equals(limpiarTexto(diaActualBD))) {
                                 
-                                // Como ya son LocalTime, comparamos directo
                                 LocalTime abre = horario.getHora_inicio();
                                 LocalTime cierra = horario.getHora_fin();
                                 
+                                // COMPARACIÓN
                                 if (horaActual.isAfter(abre) && horaActual.isBefore(cierra)) {
                                     
-                                    System.out.println(">>> ¡Punto abierto encontrado! " + punto.getNombre());
+                                    System.out.println(">>> ¡COINCIDENCIA! Creando notificación...");
 
                                     Notificacion noti = new Notificacion();
                                     noti.setUsuario(usuario);
                                     noti.setTitulo("¡" + punto.getNombre() + " está abierto!");
-                                    noti.setMensaje("Puedes reciclar ahora. Cierran a las " + cierra + ".");
-                                    noti.setFecha_creacion(java.time.LocalDateTime.now());
+                                    noti.setMensaje("Atienden hasta las " + cierra + ". ¡Aprovecha!");
+                                    
+                                    // Usamos LocalDateTime también con zona horaria
+                                    noti.setFecha_creacion(java.time.LocalDateTime.now(zonaEcuador));
+                                    
                                     noti.setLeido(false);
                                     noti.setTipo("DISPONIBILIDAD"); 
                                     noti.setEntidad_referencia("UBICACION");
                                     noti.setId_referencia(punto.getId_ubicacion_reciclaje()); 
                                     
-                                    // Guardamos y forzamos commit
-                                    Notificacion guardada = notificacionService.save(noti);
+                                    notificacionService.save(noti);
                                     
-                                    System.out.println(">>> Notificación guardada con ID: " + guardada.getId_notificacion());
+                                    System.out.println(">>> Notificación GUARDADA en BD.");
                                     
-                                    break; // Notificamos este punto y pasamos al siguiente
+                                    break; 
                                 }
                             }
                         }
