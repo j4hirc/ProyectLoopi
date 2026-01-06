@@ -67,9 +67,7 @@ public class SolicitudRecoleccionRestController {
     @GetMapping("/solicitud_recolecciones/{id}")
     public SolicitudRecoleccion show(@PathVariable Long id) { return solicitudRecoleccionService.findById(id); }
 
-    // =================================================================
-    // CREAR SOLICITUD (SOLUCIÓN FINAL ERROR 500)
-    // =================================================================
+
     @PostMapping(value = "/solicitud_recolecciones", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> create(
             @RequestParam("datos") String datosJson, 
@@ -77,7 +75,6 @@ public class SolicitudRecoleccionRestController {
     ) {
         SolicitudRecoleccion solicitudRecoleccion;
         try {
-            // 1. Convertir JSON a Objeto Java
             solicitudRecoleccion = objectMapper.readValue(datosJson, SolicitudRecoleccion.class);
         } catch (Exception e) {
             e.printStackTrace();
@@ -85,13 +82,11 @@ public class SolicitudRecoleccionRestController {
         }
 
         try {
-            // 2. Subir Foto a Supabase (si el usuario mandó una)
             if (archivo != null && !archivo.isEmpty()) {
                 String urlImagen = storageService.subirImagen(archivo);
                 solicitudRecoleccion.setFotoEvidencia(urlImagen); 
             }
 
-            // 3. Vincular Usuario Solicitante (Evita errores de "usuario detached")
             if (solicitudRecoleccion.getSolicitante() != null && solicitudRecoleccion.getSolicitante().getCedula() != null) {
                  Usuario usuarioReal = usuarioService.findById(solicitudRecoleccion.getSolicitante().getCedula());
                  if (usuarioReal != null) {
@@ -101,15 +96,11 @@ public class SolicitudRecoleccionRestController {
                  }
             }
 
-            // 4. Fecha por defecto
             if (solicitudRecoleccion.getFecha_creacion() == null) {
                 solicitudRecoleccion.setFecha_creacion(LocalDateTime.now());
             }
 
-            // =====================================================================
-            // 5. ¡AQUÍ ESTÁ EL ARREGLO! (Relación Bidireccional)
-            // =====================================================================
-            // Le decimos a cada DetalleEntrega: "Tu padre es esta solicitud"
+
             if (solicitudRecoleccion.getDetalles() != null && !solicitudRecoleccion.getDetalles().isEmpty()) {
                 for (DetalleEntrega detalle : solicitudRecoleccion.getDetalles()) {
                     detalle.setSolicitud(solicitudRecoleccion); 
