@@ -31,6 +31,8 @@ import com.example.demo.models.service.IUsuarioService;
 import com.example.demo.models.service.IRolService;
 import com.example.demo.models.service.IUbicacionReciclajeService;
 import com.example.demo.models.service.SupabaseStorageService;
+import com.example.demo.models.service.IParroquiService; // <--- AGREGAR ESTA IMPORTACIÓN
+import com.example.demo.models.entity.Parroquia;
 
 @RestController
 @RequestMapping("/api")
@@ -52,6 +54,9 @@ public class FormularioRecicladorRestController {
     @Autowired
     private IUbicacionReciclajeService ubicacionReciclajeService;
 
+    @Autowired
+    private IParroquiService parroquiaService;
+    
     @Autowired
     private SupabaseStorageService storageService;
 
@@ -123,8 +128,7 @@ public class FormularioRecicladorRestController {
 
     // --- MÉTODOS AUXILIARES ---
 
-    private void crearUbicacionDesdeFormulario(FormularioReciclador form) {
-        // 1. Crear Ubicación Base
+    private void crearUbicacionDesdeFormulario(FormularioReciclador form, Long idParroquiaExtra) {
         UbicacionReciclaje nuevaUbi = new UbicacionReciclaje();
         nuevaUbi.setNombre(form.getNombre_sitio());
         nuevaUbi.setDireccion(form.getUbicacion());
@@ -132,6 +136,14 @@ public class FormularioRecicladorRestController {
         nuevaUbi.setLongitud(form.getLongitud());
         nuevaUbi.setReciclador(form.getUsuario());
         nuevaUbi.setFoto(form.getFoto_perfil_profesional()); 
+        
+
+        if (idParroquiaExtra != null) {
+            Parroquia p = parroquiaService.findById(idParroquiaExtra);
+            if (p != null) nuevaUbi.setParroquia(p);
+        } else if (form.getUsuario().getParroquia() != null) {
+            nuevaUbi.setParroquia(form.getUsuario().getParroquia());
+        }
         
         if (form.getMateriales() != null && !form.getMateriales().isEmpty()) {
             List<UbicacionMaterial> materialesParaUbi = new ArrayList<>();
@@ -155,14 +167,13 @@ public class FormularioRecicladorRestController {
                 hUbi.setHora_fin(hForm.getHora_fin());
                 
                 hUbi.setUbicacion(nuevaUbi); 
-                hUbi.setFormulario(null); // En la ubicación, el horario no necesita saber del formulario
+                hUbi.setFormulario(null); 
                 
                 horariosParaUbi.add(hUbi);
             }
             nuevaUbi.setHorarios(horariosParaUbi);
         }
 
-        // 4. Guardar (CascadeType.ALL guardará materiales y horarios)
         ubicacionReciclajeService.save(nuevaUbi);
         System.out.println("Ubicación creada con materiales y horarios.");
     }
@@ -240,18 +251,32 @@ public class FormularioRecicladorRestController {
     }
 
     @PutMapping("/formularios_reciclador/aprobar/{id}")
-    public ResponseEntity<?> aprobar(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> aprobar(@PathVariable Long id, @RequestBody Map<String, Object> body) { // <--- Object, no String
         FormularioReciclador form = formularioRecicladorService.findById(id);
         if(form == null) return ResponseEntity.notFound().build();
         
         form.setAprobado(true);
-        form.setObservacion_admin(body.get("observacion_admin"));
+        form.setObservacion_admin((String) body.get("observacion_admin"));
         
         formularioRecicladorService.save(form);
         
+        // --- AQUÍ ESTÁ LA MAGIA ---
+        Long idParroquia = null;
+        
+        // Intentamos sacar la parroquia del JSON que mandaste desde el frontend
+        if (body.containsKey("usuario")) {
+            Map<String, Object> usuarioMap = (Map<String, Object>) body.get("usuario");
+            if (usuarioMap.containsKey("parroquia")) {
+                Map<String, Object> parroquiaMap = (Map<String, Object>) usuarioMap.get("parroquia");
+                if (parroquiaMap.containsKey("id_parroquia")) {
+                    idParroquia = Long.valueOf(parroquiaMap.get("id_parroquia").toString());
+                }
+            }
+        }
+        
         // LLAMADA A MÉTODOS AUXILIARES
         asignarRolReciclador(form.getUsuario());
-        crearUbicacionDesdeFormulario(form);
+        crearUbicacionDesdeFormulario(form, idParroquia); // <--- PASAMOS EL ID AQUI
         crearNotificacionAprobacion(form);
 
         return ResponseEntity.ok().body(Map.of("mensaje", "Formulario aprobado con éxito"));
