@@ -43,7 +43,6 @@ public class UbicacionReciclaje implements Serializable {
     @JsonIgnoreProperties({"ubicaciones", "solicitudes", "hibernateLazyInitializer", "handler"})
     private Usuario reciclador;
 
-    // --- AQUÍ ESTÁ LA CLAVE DE LA EDICIÓN ---
     @OneToMany(mappedBy = "ubicacion", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonIgnoreProperties({"ubicacion", "hibernateLazyInitializer", "handler"})
     private List<UbicacionMaterial> materialesAceptados;

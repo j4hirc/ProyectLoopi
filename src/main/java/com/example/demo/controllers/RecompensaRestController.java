@@ -1,6 +1,6 @@
 package com.example.demo.controllers;
 
-import java.time.LocalDateTime; // Para la fecha
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -9,12 +9,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.example.demo.models.entity.Notificacion; // Importar
+import com.example.demo.models.entity.Notificacion; 
 import com.example.demo.models.entity.Recompensa;
-import com.example.demo.models.entity.Usuario; // Importar
-import com.example.demo.models.service.INotificacionService; // Importar
+import com.example.demo.models.entity.Usuario; 
+import com.example.demo.models.service.INotificacionService; 
 import com.example.demo.models.service.IRecompensaService;
-import com.example.demo.models.service.IUsuarioService; // Importar
+import com.example.demo.models.service.IUsuarioService; 
 
 @RestController
 @RequestMapping("/api")
@@ -24,7 +24,6 @@ public class RecompensaRestController {
 	@Autowired
 	private IRecompensaService recompensaService;
 
-    // 1. INYECTAMOS SERVICIOS PARA NOTIFICAR
     @Autowired
     private IUsuarioService usuarioService;
 
@@ -51,7 +50,6 @@ public class RecompensaRestController {
 	public Recompensa create(@RequestBody Recompensa recompensa) {
 		Recompensa nueva = recompensaService.save(recompensa);
 
-        // 2. Notificamos a la gente
         notificarUsuariosNormales(nueva);
 
 		return nueva;

@@ -8,13 +8,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile; // Importante para archivos
+import org.springframework.web.multipart.MultipartFile; 
 
-import com.fasterxml.jackson.databind.ObjectMapper; // Importante para JSON
+import com.fasterxml.jackson.databind.ObjectMapper; 
 
 import com.example.demo.models.entity.Material;
 import com.example.demo.models.service.IMaterialService;
-import com.example.demo.models.service.SupabaseStorageService; // Tu servicio de nube
+import com.example.demo.models.service.SupabaseStorageService;
 
 @RestController
 @RequestMapping("/api")
@@ -24,11 +24,9 @@ public class MaterialRestController {
 	@Autowired
 	private IMaterialService materialService;
 
-    // 1. Inyectamos Supabase
     @Autowired
     private SupabaseStorageService storageService;
 
-    // 2. Herramienta para leer JSON
     private ObjectMapper objectMapper = new ObjectMapper();
 
 	@GetMapping("/materiales")
@@ -53,13 +51,11 @@ public class MaterialRestController {
     ) {
         Material material;
         try {
-            // Convertir texto JSON a Objeto
             material = objectMapper.readValue(datosJson, Material.class);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
         }
 
-        // Subir imagen a Supabase
         if (archivo != null && !archivo.isEmpty()) {
             String urlImagen = storageService.subirImagen(archivo);
             material.setImagen(urlImagen);
@@ -69,9 +65,7 @@ public class MaterialRestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(nuevo);
 	}
 
-    // =================================================================
-    // ACTUALIZAR MATERIAL
-    // =================================================================
+
 	@PutMapping(value = "/materiales/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<?> update(
             @PathVariable Long id, 
@@ -90,19 +84,15 @@ public class MaterialRestController {
             return ResponseEntity.notFound().build();
         }
 
-        // 1. Si mandan foto nueva, la subimos
         if (archivo != null && !archivo.isEmpty()) {
             String urlImagen = storageService.subirImagen(archivo);
             materialActual.setImagen(urlImagen);
         }
 
-        // 2. Actualizar campos
         if (materialInput.getNombre() != null) materialActual.setNombre(materialInput.getNombre());
         if (materialInput.getTipo_Material() != null) materialActual.setTipo_Material(materialInput.getTipo_Material());
         if (materialInput.getPuntosPorKg() != null) materialActual.setPuntosPorKg(materialInput.getPuntosPorKg());
         if (materialInput.getDescripcion() != null) materialActual.setDescripcion(materialInput.getDescripcion());
-        
-        // La imagen ya se manejó arriba, si no hay archivo nuevo, se queda la vieja.
 
 		Material actualizado = materialService.save(materialActual);
         return ResponseEntity.status(HttpStatus.CREATED).body(actualizado);

@@ -20,7 +20,6 @@ import com.example.demo.models.entity.Logro;
 import com.example.demo.models.entity.Notificacion;
 import com.example.demo.models.entity.Rango;
 import com.example.demo.models.entity.SolicitudRecoleccion;
-// IMPORTANTE: Aquí importamos tu clase correcta
 import com.example.demo.models.entity.DetalleEntrega; 
 import com.example.demo.models.entity.Usuario;
 import com.example.demo.models.entity.UsuarioLogro;
@@ -58,7 +57,6 @@ public class SolicitudRecoleccionRestController {
     @Autowired
     private SupabaseStorageService storageService;
 
-    // Configuración del Mapper para fechas
     private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @GetMapping("/solicitud_recolecciones")
@@ -107,12 +105,11 @@ public class SolicitudRecoleccionRestController {
                 }
             }
 
-            // 6. Guardar en BD (El CascadeType.ALL guardará los detalles automáticamente)
             SolicitudRecoleccion nueva = solicitudRecoleccionService.save(solicitudRecoleccion);
             return ResponseEntity.status(HttpStatus.CREATED).body(nueva);
 
         } catch (Exception e) {
-            e.printStackTrace(); // Esto te mostrará el error exacto en la consola si falla
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("mensaje", "Error interno al guardar: " + e.getMessage()));
         }

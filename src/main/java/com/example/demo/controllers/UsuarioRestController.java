@@ -36,7 +36,7 @@ import com.example.demo.models.entity.UsuarioRol;
 import com.example.demo.models.service.IFavoritoService;
 import com.example.demo.models.service.INotificacionService;
 import com.example.demo.models.service.IUsuarioService;
-import com.example.demo.models.service.SupabaseStorageService; // TU SERVICIO DE NUBE
+import com.example.demo.models.service.SupabaseStorageService; 
 
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -200,7 +200,7 @@ public class UsuarioRestController {
 		if (usuarioInput.getParroquia() != null) usuarioActual.setParroquia(usuarioInput.getParroquia());
 		if (usuarioInput.getRango() != null) usuarioActual.setRango(usuarioInput.getRango());
 		
-		// Password
+
 		if (usuarioInput.getPassword() != null && !usuarioInput.getPassword().isEmpty()) {
 			String pwdLimpia = usuarioInput.getPassword().trim().replace("[", "").replace("]", "");
 			if(!pwdLimpia.startsWith("$2a$")) {
@@ -208,7 +208,6 @@ public class UsuarioRestController {
 			}
 		}
 
-		// 3. Actualizar Roles (Lógica extraída a método auxiliar)
 		if (usuarioInput.getRoles() != null) {
             procesarRolesUpdate(usuarioActual, usuarioInput.getRoles());
 		}
@@ -444,15 +443,11 @@ public class UsuarioRestController {
 
                             String diaBD = horario.getDia_semana();
                             
-                            // Debug interno
-                            // System.out.println("   Revisando: " + punto.getNombre() + " (" + diaBD + " " + horario.getHora_inicio() + " - " + horario.getHora_fin() + ")");
-
                             if (limpiarTexto(diaBD).equals(limpiarTexto(diaActualBD))) {
                                 
                                 LocalTime abre = horario.getHora_inicio();
                                 LocalTime cierra = horario.getHora_fin();
                                 
-                                // COMPARACIÓN
                                 if (horaActual.isAfter(abre) && horaActual.isBefore(cierra)) {
                                     
                                     System.out.println(">>> ¡COINCIDENCIA! Creando notificación...");
@@ -461,8 +456,6 @@ public class UsuarioRestController {
                                     noti.setUsuario(usuario);
                                     noti.setTitulo("¡" + punto.getNombre() + " está abierto!");
                                     noti.setMensaje("Atienden hasta las " + cierra + ". ¡Aprovecha!");
-                                    
-                                    // Usamos LocalDateTime también con zona horaria
                                     noti.setFecha_creacion(java.time.LocalDateTime.now(zonaEcuador));
                                     
                                     noti.setLeido(false);
