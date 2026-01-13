@@ -44,12 +44,10 @@ public class HorarioRecicladorRestController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public HorarioReciclador create(
 	        @RequestBody HorarioReciclador horarioReciclador, 
-	        @RequestParam Long id_formulario) { // <--- Pide el ID explícitamente en la URL
+	        @RequestParam Long id_formulario) { 
 	    
-	    // 1. Buscamos el formulario padre
 	    FormularioReciclador formulario = formularioService.findById(id_formulario);
 	    
-	    // 2. Si existe, se lo "pegamos" al horario antes de guardar
 	    if (formulario != null) {
 	        horarioReciclador.setFormulario(formulario);
 	    }

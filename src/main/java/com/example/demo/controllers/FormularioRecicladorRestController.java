@@ -31,7 +31,7 @@ import com.example.demo.models.service.IUsuarioService;
 import com.example.demo.models.service.IRolService;
 import com.example.demo.models.service.IUbicacionReciclajeService;
 import com.example.demo.models.service.SupabaseStorageService;
-import com.example.demo.models.service.IParroquiService; // <--- AGREGAR ESTA IMPORTACIÓN
+import com.example.demo.models.service.IParroquiService; 
 import com.example.demo.models.entity.Parroquia;
 
 @RestController
@@ -74,7 +74,6 @@ public class FormularioRecicladorRestController {
        return ResponseEntity.ok(form);
     }
 
-    // CREATE
     @PostMapping(value = "/formularios_reciclador", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> create(
             @RequestParam("datos") String datosJson,
@@ -126,7 +125,6 @@ public class FormularioRecicladorRestController {
         }
     }
 
-    // --- MÉTODOS AUXILIARES ---
 
     private void crearUbicacionDesdeFormulario(FormularioReciclador form, Long idParroquiaExtra) {
         UbicacionReciclaje nuevaUbi = new UbicacionReciclaje();
@@ -251,7 +249,7 @@ public class FormularioRecicladorRestController {
     }
 
     @PutMapping("/formularios_reciclador/aprobar/{id}")
-    public ResponseEntity<?> aprobar(@PathVariable Long id, @RequestBody Map<String, Object> body) { // <--- Object, no String
+    public ResponseEntity<?> aprobar(@PathVariable Long id, @RequestBody Map<String, Object> body) { 
         FormularioReciclador form = formularioRecicladorService.findById(id);
         if(form == null) return ResponseEntity.notFound().build();
         
@@ -260,10 +258,8 @@ public class FormularioRecicladorRestController {
         
         formularioRecicladorService.save(form);
         
-        // --- AQUÍ ESTÁ LA MAGIA ---
         Long idParroquia = null;
         
-        // Intentamos sacar la parroquia del JSON que mandaste desde el frontend
         if (body.containsKey("usuario")) {
             Map<String, Object> usuarioMap = (Map<String, Object>) body.get("usuario");
             if (usuarioMap.containsKey("parroquia")) {
@@ -274,9 +270,8 @@ public class FormularioRecicladorRestController {
             }
         }
         
-        // LLAMADA A MÉTODOS AUXILIARES
         asignarRolReciclador(form.getUsuario());
-        crearUbicacionDesdeFormulario(form, idParroquia); // <--- PASAMOS EL ID AQUI
+        crearUbicacionDesdeFormulario(form, idParroquia); 
         crearNotificacionAprobacion(form);
 
         return ResponseEntity.ok().body(Map.of("mensaje", "Formulario aprobado con éxito"));
