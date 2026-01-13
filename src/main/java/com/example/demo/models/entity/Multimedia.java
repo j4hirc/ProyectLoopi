@@ -36,7 +36,6 @@ public class Multimedia implements Serializable {
     @JoinColumn(name = "id_usuario")
     private Usuario usuario;
 
-    // ===== GETTERS & SETTERS =====
 
     public Long getId_multimedia() {
         return id_multimedia;

@@ -61,11 +61,11 @@ public class FormularioReciclador implements Serializable {
     private Usuario usuario;
 
 
-    @OneToMany(mappedBy = "formulario", fetch = FetchType.LAZY, cascade = CascadeType.ALL) // <--- OBLIGATORIO
+    @OneToMany(mappedBy = "formulario", fetch = FetchType.LAZY, cascade = CascadeType.ALL) 
     @JsonIgnoreProperties("formulario")
     private List<HorarioReciclador> horarios;
 
-    @OneToMany(mappedBy = "formulario", fetch = FetchType.LAZY, cascade = CascadeType.ALL) // <--- AGREGAR AQUÍ TAMBIÉN
+    @OneToMany(mappedBy = "formulario", fetch = FetchType.LAZY, cascade = CascadeType.ALL) 
     @JsonIgnoreProperties("formulario")
     private List<FormularioRecicladorMaterial> materiales;
 

@@ -26,20 +26,17 @@ public class FavoritoRestController {
     @Autowired
     private IFavoritoService favoritoService;
 
-    // LISTAR FAVORITOS DE USUARIO
     @GetMapping("/favoritos/usuario/{cedula}")
     public List<Favorito> listarPorUsuario(@PathVariable Long cedula) {
         return favoritoService.findByUsuario(cedula);
     }
 
-    // CREAR FAVORITO ❤️
     @PostMapping("/favoritos")
     @ResponseStatus(HttpStatus.CREATED)
     public Favorito create(@RequestBody Favorito favorito) {
         return favoritoService.save(favorito);
     }
 
-    // ELIMINAR FAVORITO ❌ (por usuario + ubicación)
     @DeleteMapping("/favoritos")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(

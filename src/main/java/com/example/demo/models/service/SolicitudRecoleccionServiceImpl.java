@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.models.DAO.ISolicitudRecoleccionDao;
 import com.example.demo.models.DAO.IUbicacionReciclajeDao; 
-import com.example.demo.models.entity.DetalleEntrega; // <--- NO OLVIDES IMPORTAR ESTO
+import com.example.demo.models.entity.DetalleEntrega; 
 import com.example.demo.models.entity.SolicitudRecoleccion;
 import com.example.demo.models.entity.UbicacionReciclaje;
 
@@ -44,7 +44,6 @@ public class SolicitudRecoleccionServiceImpl implements ISolicitudRecoleccionSer
 	    
 	
 	    if (puntoFijo.getReciclador() == null) {
-	        // CASO A: PUNTO SIN ENCARGADO
 	        
 	     
 	        if (solicitud.getFotoEvidencia() == null || solicitud.getFotoEvidencia().trim().isEmpty()) {

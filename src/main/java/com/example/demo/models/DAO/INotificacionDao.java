@@ -12,7 +12,6 @@ import com.example.demo.models.entity.Notificacion;
 
 public interface INotificacionDao extends CrudRepository<Notificacion, Long> {
 
-    // 🔔 Todas las notificaciones de un usuario (ordenadas por fecha)
     @Query("""
         SELECT n 
         FROM Notificacion n
@@ -21,7 +20,6 @@ public interface INotificacionDao extends CrudRepository<Notificacion, Long> {
     """)
     List<Notificacion> listarPorUsuario(@Param("cedula") Long cedula);
 
-    // 🔴 Notificaciones NO leídas
     @Query("""
         SELECT n 
         FROM Notificacion n
@@ -31,7 +29,6 @@ public interface INotificacionDao extends CrudRepository<Notificacion, Long> {
     """)
     List<Notificacion> listarNoLeidas(@Param("cedula") Long cedula);
 
-    // 🔢 Contador de no leídas (para la campanita)
     @Query("""
         SELECT COUNT(n)
         FROM Notificacion n
@@ -40,7 +37,6 @@ public interface INotificacionDao extends CrudRepository<Notificacion, Long> {
     """)
     Long contarNoLeidas(@Param("cedula") Long cedula);
 
-    // ✔️ Marcar todas como leídas
     @Modifying
     @Transactional
     @Query("""

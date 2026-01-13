@@ -16,7 +16,6 @@ import java.util.UUID;
 @Service
 public class SupabaseStorageService {
 
-    // --- TUS CREDENCIALES ---
     private final String PROJECT_URL = "https://mkrvevdwqkwyctqxddpu.supabase.co"; 
     private final String API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcnZldmR3cWt3eWN0cXhkZHB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY1OTExMzAsImV4cCI6MjA4MjE2NzEzMH0.vAUs-9G_8Mh80E_v-x2k8tEv-rbadPM_zvQIqHNtmFY"; 
     private final String BUCKET_NAME = "imagenes";
@@ -29,17 +28,14 @@ public class SupabaseStorageService {
 
     public String subirImagen(MultipartFile file) {
         try {
-            // 1. Generar nombre único
+
             String fileName = UUID.randomUUID().toString() + "_" + file.getOriginalFilename();
             String urlApi = PROJECT_URL + "/storage/v1/object/" + BUCKET_NAME + "/" + fileName;
 
-            // 2. Preparar Headers
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", "Bearer " + API_KEY);
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
-            // 3. Preparar el cuerpo (El archivo)
-            // Truco: Usamos ByteArrayResource sobreescribiendo getFilename para que Supabase lo reconozca
             ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
                 @Override
                 public String getFilename() {
@@ -52,15 +48,15 @@ public class SupabaseStorageService {
 
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
-            // 4. Enviar Petición (POST)
+
             restTemplate.postForEntity(urlApi, requestEntity, String.class);
 
-            // 5. Retornar URL Pública
+
             return PROJECT_URL + "/storage/v1/object/public/" + BUCKET_NAME + "/" + fileName;
 
         } catch (Exception e) {
             System.err.println("Error subiendo a Supabase: " + e.getMessage());
-            e.printStackTrace(); // Para ver el error real en consola
+            e.printStackTrace(); 
             return null; 
         }
     }

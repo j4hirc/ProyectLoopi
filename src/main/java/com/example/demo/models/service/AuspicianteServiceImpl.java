@@ -21,15 +21,12 @@ public class AuspicianteServiceImpl implements IAuspicianteService{
 	@Override
 	@Transactional(readOnly = true )
 	public List<Auspiciante> findAll() {
-		// TODO Auto-generated method stub
 		return (List<Auspiciante>) AuspicianteDao.findAll();	
 	}
 		
-	//Guardar
 	@Override
 	@Transactional
 	public Auspiciante save(Auspiciante auspiciante) {
-		// TODO Auto-generated method stub
 		return AuspicianteDao.save(auspiciante);
 	}
 
@@ -37,7 +34,6 @@ public class AuspicianteServiceImpl implements IAuspicianteService{
 	@Override
 	@Transactional(readOnly = true)
 	public Auspiciante findById(Long id) {
-		// TODO Auto-generated method stub
 		return AuspicianteDao.findById(id).orElse(null);
 	}
 

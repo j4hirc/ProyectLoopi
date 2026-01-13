@@ -53,7 +53,7 @@ public class FormularioRecicladorServiceImpl implements IFormularioRecicladorSer
 	    if(formulario.getHorarios() != null) {
 	        System.out.println("Guardando formulario con " + formulario.getHorarios().size() + " horarios.");
 	        for (HorarioReciclador h : formulario.getHorarios()) {
-	            h.setFormulario(formulario); // Esto enlaza el ID
+	            h.setFormulario(formulario);
 	        }
 	    } else {
 	        System.out.println("ATENCIÓN: La lista de horarios es NULL");
@@ -82,7 +82,7 @@ public class FormularioRecicladorServiceImpl implements IFormularioRecicladorSer
 	
 	@Override
 	@Transactional
-	public void aprobarFormulario(Long id, String observacion) { // <--- Nuevo parámetro
+	public void aprobarFormulario(Long id, String observacion) { 
 
 	    FormularioReciclador form = formularioRecicladorDao.findById(id).orElse(null);
 
@@ -93,12 +93,10 @@ public class FormularioRecicladorServiceImpl implements IFormularioRecicladorSer
 	            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
 	    form.setAprobado(true);
-	    // AQUÍ USAMOS EL MENSAJE DEL ADMIN O UNO POR DEFECTO
 	    form.setObservacion_admin(observacion != null && !observacion.isEmpty() ? observacion : "Solicitud Aprobada");
 	    
 	    formularioRecicladorDao.save(form);
 
-	    // ... (El resto de tu lógica de UbicacionReciclaje y Roles se queda IGUAL) ...
 	    UbicacionReciclaje u = new UbicacionReciclaje();
 	    u.setNombre(form.getNombre_sitio());
 	    u.setDireccion(form.getUbicacion());
