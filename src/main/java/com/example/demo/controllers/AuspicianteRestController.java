@@ -24,7 +24,6 @@ public class AuspicianteRestController {
 	@Autowired
 	private IAuspicianteService auspicianteService;
 
-    // 1. Inyectamos Supabase
     @Autowired
     private SupabaseStorageService storageService;
 
@@ -44,9 +43,7 @@ public class AuspicianteRestController {
 		return ResponseEntity.ok(auspiciante);
 	}
 
-    // =================================================================
-    // CREAR AUSPICIANTE (Con Logo)
-    // =================================================================
+
 	@PostMapping(value = "/auspiciantes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<?> create(
             @RequestParam("datos") String datosJson, 
@@ -59,7 +56,6 @@ public class AuspicianteRestController {
             return ResponseEntity.badRequest().body(Map.of("mensaje", "Error JSON: " + e.getMessage()));
         }
 
-		// 1. Validar si ya existe por nombre o código (Tu lógica original)
 		List<Auspiciante> todos = auspicianteService.findAll();
 		
 		boolean existeNombre = todos.stream()
@@ -78,7 +74,6 @@ public class AuspicianteRestController {
 			}
 		}
 
-        // 2. Subir Logo a Supabase
         if (archivo != null && !archivo.isEmpty()) {
             String urlImagen = storageService.subirImagen(archivo);
             auspiciante.setImagen(urlImagen);
@@ -87,9 +82,7 @@ public class AuspicianteRestController {
 		return ResponseEntity.status(HttpStatus.CREATED).body(auspicianteService.save(auspiciante));
 	}
 
-    // =================================================================
-    // ACTUALIZAR AUSPICIANTE
-    // =================================================================
+
 	@PutMapping(value = "/auspiciantes/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<?> update(
             @PathVariable Long id,
@@ -108,7 +101,6 @@ public class AuspicianteRestController {
 			return ResponseEntity.notFound().build();
 		}
 
-		// 1. Validar duplicados al editar (Tu lógica original)
 		List<Auspiciante> todos = auspicianteService.findAll();
 
 		boolean nombreDuplicado = todos.stream()
@@ -128,18 +120,15 @@ public class AuspicianteRestController {
 			}
 		}
 
-        // 2. Subir Logo nuevo si existe
         if (archivo != null && !archivo.isEmpty()) {
             String urlImagen = storageService.subirImagen(archivo);
             auspicianteActual.setImagen(urlImagen);
         }
 
-        // 3. Actualizar campos
 		auspicianteActual.setNombre(auspicianteInput.getNombre());
 		auspicianteActual.setDescripcion(auspicianteInput.getDescripcion());
 		auspicianteActual.setCodigo(auspicianteInput.getCodigo());
         
-        // No tocamos la imagen si no enviaron archivo nuevo
 
 		return ResponseEntity.status(HttpStatus.CREATED).body(auspicianteService.save(auspicianteActual));
 	}
