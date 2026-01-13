@@ -228,6 +228,40 @@ public class FormularioRecicladorRestController {
         noti.setMensaje(form.getObservacion_admin() != null ? form.getObservacion_admin() : "Solicitud rechazada.");
         notificacionService.save(noti);
     }
+
+    // Agrega este método a tu clase FormularioRecicladorRestController
+
+    @PutMapping("/formularios_reciclador/{id}")
+    public ResponseEntity<?> update(@RequestBody FormularioReciclador formularioDetails, @PathVariable Long id) {
+        
+        FormularioReciclador formularioActual = formularioRecicladorService.findById(id);
+
+        if (formularioActual == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Actualizamos los campos editables
+        if(formularioDetails.getObservacion_admin() != null) {
+            formularioActual.setObservacion_admin(formularioDetails.getObservacion_admin());
+        }
+
+        // Si desde el front envían aprobado = false, asumimos que es un rechazo
+        if (formularioDetails.getAprobado() != null) {
+            boolean estabaAprobado = formularioActual.getAprobado() != null && formularioActual.getAprobado();
+            boolean nuevoEstado = formularioDetails.getAprobado();
+
+            formularioActual.setAprobado(nuevoEstado);
+
+            // Si se marca como NO aprobado (rechazo), enviamos la notificación
+            if (!nuevoEstado) {
+                crearNotificacionRechazo(formularioActual);
+            }
+        }
+
+        formularioRecicladorService.save(formularioActual);
+        
+        return ResponseEntity.ok(formularioActual);
+    }
     
     @GetMapping("/formularios_reciclador/usuario/{idUsuario}")
     public ResponseEntity<?> buscarPorUsuario(@PathVariable Long idUsuario) {
